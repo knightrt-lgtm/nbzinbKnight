@@ -1,0 +1,6 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+# Course materials: kept local only, not published in the public repo
+project-docs/
