@@ -53,10 +53,18 @@ nb_irls_beta <- function(X, y, theta,
     mu <- exp(eta)
   }
 
+  # Working weights a_i * theta * mu_i / (theta + mu_i). As theta -> Inf this
+  # tends to a_i * mu_i, the Poisson IRLS weight; theta = Inf is used to get the
+  # Poisson starting fit (Section 3.1(c)).
+  irls_w <- function(mu) {
+    if (is.infinite(theta)) prior_weights * mu
+    else prior_weights * theta * mu / (theta + mu)
+  }
+
   converged <- FALSE
   for (iter in seq_len(maxit)) {
     # Working weights and working response (Section 3.1(a))
-    w <- prior_weights * theta * mu / (theta + mu)
+    w <- irls_w(mu)
     z <- (eta - offset) + (y - mu) / mu
 
     # Weighted least squares: beta = (X'WX)^{-1} X'Wz, via QR of sqrt(W) X
@@ -77,7 +85,7 @@ nb_irls_beta <- function(X, y, theta,
   }
 
   # Weights at the final beta (used later for Var(beta) = (X'WX)^{-1})
-  w <- prior_weights * theta * mu / (theta + mu)
+  w <- irls_w(mu)
   names(beta) <- colnames(X)
 
   list(beta = beta, eta = eta, mu = mu, weights = w,
