@@ -83,3 +83,77 @@ nb_irls_beta <- function(X, y, theta,
   list(beta = beta, eta = eta, mu = mu, weights = w,
        iter = iter, converged = converged)
 }
+
+# Score U(theta) and second derivative H(theta) of the NB2 log-likelihood
+# with respect to theta, with mu (i.e. beta) held fixed (Section 3.1(b)):
+#   U(theta) = sum_i a_i [ psi(y_i + theta) - psi(theta) + log theta + 1
+#                          - log(theta + mu_i) - (y_i + theta) / (theta + mu_i) ]
+#   H(theta) = sum_i a_i [ psi'(y_i + theta) - psi'(theta) + 1 / theta
+#                          - 2 / (theta + mu_i)
+#                          + (y_i + theta) / (theta + mu_i)^2 ]
+# psi = digamma, psi' = trigamma.
+#' @noRd
+nb_theta_score <- function(y, mu, theta, prior_weights = rep(1, length(y))) {
+  U <- sum(prior_weights * (digamma(y + theta) - digamma(theta) +
+                              log(theta) + 1 - log(theta + mu) -
+                              (y + theta) / (theta + mu)))
+  H <- sum(prior_weights * (trigamma(y + theta) - trigamma(theta) +
+                              1 / theta - 2 / (theta + mu) +
+                              (y + theta) / (theta + mu)^2))
+  list(U = U, H = H)
+}
+
+# Newton-Raphson for theta with beta (mu) held fixed (Section 3.1(b)).
+#
+# Works on phi = log(theta) so theta stays positive. By the chain rule
+# (d theta / d phi = theta):
+#   U_phi = theta * U(theta)
+#   H_phi = theta^2 * H(theta) + theta * U(theta)
+#   update  phi <- phi - U_phi / H_phi
+#
+# Safeguards (they do not change the answer at convergence):
+#   * if H_phi >= 0 (log-likelihood not concave here, so the Newton step could
+#     point downhill), step uphill by sign(U_phi) instead;
+#   * step-halving: if a step lowers the log-likelihood, halve it (up to 30
+#     times) before accepting.
+#
+# Returns theta, the score U and second derivative H at the final theta
+# (H is used later for SE(theta) = {-H}^{-1/2}), iterations, convergence flag.
+#' @noRd
+nb_theta_nr <- function(y, mu, theta_start,
+                        prior_weights = rep(1, length(y)),
+                        tol = 1e-10, maxit = 100) {
+  phi <- log(theta_start)
+  ll <- nb_loglik(y, mu, exp(phi), prior_weights)
+  converged <- FALSE
+
+  for (iter in seq_len(maxit)) {
+    theta <- exp(phi)
+    sc <- nb_theta_score(y, mu, theta, prior_weights)
+    U_phi <- theta * sc$U
+    H_phi <- theta^2 * sc$H + theta * sc$U
+
+    # Newton step on phi (or a plain uphill step if not concave here)
+    step <- if (H_phi < 0) -U_phi / H_phi else sign(U_phi)
+
+    # Step-halving: never accept a step that lowers the log-likelihood
+    for (half in 0:30) {
+      phi_new <- phi + step
+      ll_new <- nb_loglik(y, mu, exp(phi_new), prior_weights)
+      if (is.finite(ll_new) && ll_new >= ll - 1e-12) break
+      step <- step / 2
+    }
+
+    phi <- phi_new
+    ll <- ll_new
+    if (abs(step) < tol) {
+      converged <- TRUE
+      break
+    }
+  }
+
+  theta <- exp(phi)
+  sc <- nb_theta_score(y, mu, theta, prior_weights)
+  list(theta = theta, U = sc$U, H = sc$H, loglik = ll,
+       iter = iter, converged = converged)
+}
