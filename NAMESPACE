@@ -2,3 +2,5 @@
 
 export(nbreg)
 export(nbreg_control)
+export(zinbreg)
+export(zinbreg_control)

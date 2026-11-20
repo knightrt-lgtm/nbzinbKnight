@@ -102,20 +102,36 @@ nbreg <- function(formula, data, offset, control = nbreg_control()) {
 #    (if the denominator is <= 0 there is no overdispersion; start large).
 # 3. Alternate (a) IRLS for beta with theta fixed and (b) Newton-Raphson for
 #    log(theta) with beta fixed, until the log-likelihood changes by < tol.
+#
+# beta_start / theta_start: warm starts. The ZINB EM algorithm calls this as
+# its count-part M-step with prior_weights = 1 - tau, starting from the
+# previous EM iteration's (beta, theta) instead of a fresh Poisson fit.
+# warn = FALSE suppresses the convergence / large-theta warnings (the EM loop
+# reports its own convergence).
 #' @noRd
 nbreg_fit <- function(X, y, offset = rep(0, length(y)),
                       prior_weights = rep(1, length(y)),
-                      control = nbreg_control()) {
-  # Step 1: Poisson starting values
-  pois <- nb_irls_beta(X, y, theta = Inf, offset = offset,
-                       prior_weights = prior_weights,
-                       tol = control$irls_tol, maxit = control$irls_maxit)
-  beta <- pois$beta
-  mu <- pois$mu
+                      control = nbreg_control(),
+                      beta_start = NULL, theta_start = NULL, warn = TRUE) {
+  if (is.null(beta_start)) {
+    # Step 1: Poisson starting values
+    pois <- nb_irls_beta(X, y, theta = Inf, offset = offset,
+                         prior_weights = prior_weights,
+                         tol = control$irls_tol, maxit = control$irls_maxit)
+    beta <- pois$beta
+    mu <- pois$mu
+  } else {
+    beta <- beta_start
+    mu <- exp(drop(X %*% beta) + offset)
+  }
 
-  # Step 2: moment estimate of theta
-  denom <- sum(prior_weights * ((y - mu)^2 - mu))
-  theta <- if (denom > 0) sum(prior_weights * mu^2) / denom else 1e4
+  if (is.null(theta_start)) {
+    # Step 2: moment estimate of theta
+    denom <- sum(prior_weights * ((y - mu)^2 - mu))
+    theta <- if (denom > 0) sum(prior_weights * mu^2) / denom else 1e4
+  } else {
+    theta <- theta_start
+  }
 
   ll_old <- nb_loglik(y, mu, theta, prior_weights)
   converged <- FALSE
@@ -147,10 +163,10 @@ nbreg_fit <- function(X, y, offset = rep(0, length(y)),
     ll_old <- ll
   }
 
-  if (!converged)
+  if (warn && !converged)
     warning(sprintf("nbreg() did not converge in %d iterations.",
                     control$maxit), call. = FALSE)
-  if (theta > control$theta_max)
+  if (warn && theta > control$theta_max)
     warning(sprintf(paste0("Estimated theta (%.3g) is very large: the data ",
                            "show little or no overdispersion, so the model is ",
                            "close to Poisson."), theta), call. = FALSE)
