@@ -108,8 +108,13 @@ zinbreg <- function(formula, data, offset, control = zinbreg_control()) {
 
   fit <- zinbreg_fit(X, Z, y, offset = off, control = control)
 
+  # xlevels / contrasts: factor information so predict() can rebuild X and Z
   structure(c(fit, list(y = y, x = X, z = Z, offset = off,
                         terms = list(count = mtX, zero = mtZ),
+                        xlevels = list(count = stats::.getXlevels(mtX, mf),
+                                       zero = stats::.getXlevels(mtZ, mf)),
+                        contrasts = list(count = attr(X, "contrasts"),
+                                         zero = attr(Z, "contrasts")),
                         formula = ff, call = cl)),
             class = "zinbreg")
 }
