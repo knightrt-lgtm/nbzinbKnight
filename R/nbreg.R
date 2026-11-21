@@ -89,8 +89,10 @@ nbreg <- function(formula, data, offset, control = nbreg_control()) {
 
   fit <- nbreg_fit(X, y, offset = off, control = control)
 
+  # xlevels: factor levels, so predict() can rebuild X for new data
   structure(c(fit, list(y = y, x = X, offset = off, terms = mt,
-                        call = cl)),
+                        xlevels = stats::.getXlevels(mt, mf),
+                        contrasts = attr(X, "contrasts"), call = cl)),
             class = "nbreg")
 }
 
