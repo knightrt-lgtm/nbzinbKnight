@@ -171,11 +171,20 @@ nbreg_fit <- function(X, y, offset = rep(0, length(y)),
                            "show little or no overdispersion, so the model is ",
                            "close to Poisson."), theta), call. = FALSE)
 
-  # IRLS working weights at the final (beta, theta), for Var(beta) later
+  # IRLS working weights at the final (beta, theta)
   w <- prior_weights * theta * mu / (theta + mu)
 
-  list(coefficients = beta, theta = theta, theta_score = th$U,
-       theta_hessian = th$H, loglik = ll, iter = iter, converged = converged,
+  # Standard errors (Section 3.1(d)):
+  #   Var(beta_hat) = (X' W_hat X)^{-1}, treating theta as known (as glm.nb
+  #   does); X'WX is inverted through its Cholesky factor.
+  #   SE(theta_hat) = {-H(theta_hat)}^{-1/2}, H from the theta Newton step.
+  vcov <- chol2inv(chol(crossprod(X, w * X)))
+  dimnames(vcov) <- list(names(beta), names(beta))
+  H <- nb_theta_score(y, mu, theta, prior_weights)$H
+  se_theta <- if (H < 0) (-H)^(-1/2) else NA_real_
+
+  list(coefficients = beta, vcov = vcov, theta = theta, se_theta = se_theta,
+       loglik = ll, iter = iter, converged = converged,
        fitted.values = mu, linear.predictors = drop(X %*% beta) + offset,
        weights = w, prior.weights = prior_weights)
 }

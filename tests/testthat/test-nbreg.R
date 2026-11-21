@@ -1,7 +1,7 @@
 # Tests for nbreg(). Reference fits use MASS::glm.nb() with tight tolerances.
 # Required agreement (project description, Table 4, NB column):
 #   coefficients <= 1e-5, theta <= 1e-4, log-likelihood <= 1e-4.
-# (Standard errors are added and tested in a later checkpoint.)
+#   standard errors <= 1e-5 (SE(theta) checked to 1e-4).
 
 ref_control <- function() stats::glm.control(epsilon = 1e-10, maxit = 100)
 
@@ -10,6 +10,8 @@ expect_matches_glm_nb <- function(ours, ref) {
   expect_equal(names(ours$coefficients), names(stats::coef(ref)))
   expect_lt(max(abs(ours$coefficients - stats::coef(ref))), 1e-5)
   expect_lt(abs(ours$theta - ref$theta), 1e-4)
+  expect_lt(max(abs(sqrt(diag(ours$vcov)) - sqrt(diag(stats::vcov(ref))))), 1e-5)
+  expect_lt(abs(ours$se_theta - ref$SE.theta), 1e-4)
   expect_lt(abs(ours$loglik - as.numeric(stats::logLik(ref))), 1e-4)
 }
 

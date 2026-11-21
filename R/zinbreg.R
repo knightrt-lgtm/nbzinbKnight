@@ -186,8 +186,17 @@ zinbreg_fit <- function(X, Z, y, offset = rep(0, length(y)),
     warning(sprintf(paste0("Estimated theta (%.3g) is very large: the count ",
                            "part is close to Poisson."), theta), call. = FALSE)
 
+  # Standard errors from the observed information in (beta, gamma, log theta)
+  vcov_full <- zinb_vcov(beta, gamma, theta, X, Z, y, offset)
+  k <- nrow(vcov_full)
+  se_logtheta <- sqrt(vcov_full[k, k])
+
   pi_ <- stats::plogis(eta_zero)
-  list(coefficients = list(count = beta, zero = gamma), theta = theta,
+  list(coefficients = list(count = beta, zero = gamma),
+       vcov = vcov_full[-k, -k, drop = FALSE], vcov_full = vcov_full,
+       theta = theta, se_logtheta = se_logtheta,
+       # delta method: SE(theta) = theta * SE(log theta)
+       se_theta = theta * se_logtheta,
        loglik = ll, loglik_trace = ll_trace, iter = iter,
        converged = converged, fitted.values = (1 - pi_) * mu, mu = mu,
        pi = pi_, tau = zinb_estep(y, mu, theta, eta_zero),

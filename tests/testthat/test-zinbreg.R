@@ -1,7 +1,7 @@
 # Tests for zinbreg(). Reference fits use pscl::zeroinfl(dist = "negbin")
 # with a tight tolerance. Required agreement (Table 4, ZINB column):
 #   coefficients <= 1e-3, log(theta) <= 1e-3, log-likelihood <= 1e-3.
-# (Standard errors are added and tested in a later checkpoint.)
+#   standard errors <= 1e-3 (including SE of log(theta)).
 
 ref_zinb <- function(formula, data) {
   pscl::zeroinfl(formula, data = data, dist = "negbin",
@@ -15,6 +15,11 @@ expect_matches_zeroinfl <- function(ours, ref) {
   expect_lt(max(abs(ours$coefficients$count - ref$coefficients$count)), 1e-3)
   expect_lt(max(abs(ours$coefficients$zero - ref$coefficients$zero)), 1e-3)
   expect_lt(abs(log(ours$theta) - log(ref$theta)), 1e-3)
+  se_ours <- sqrt(diag(ours$vcov))
+  se_ref <- sqrt(diag(stats::vcov(ref)))
+  expect_equal(names(se_ours), names(se_ref))
+  expect_lt(max(abs(se_ours - se_ref)), 1e-3)
+  expect_lt(abs(ours$se_logtheta - ref$SE.logtheta), 1e-3)
   expect_lt(abs(ours$loglik - as.numeric(stats::logLik(ref))), 1e-3)
 }
 

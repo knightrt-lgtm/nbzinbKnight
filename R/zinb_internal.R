@@ -95,3 +95,36 @@ logit_irls <- function(Z, tau, gamma_start = NULL, tol = 1e-10, maxit = 100) {
   list(gamma = gamma, eta = eta, pi = p, weights = p * (1 - p),
        iter = iter, converged = converged)
 }
+
+# Observed-data ZINB log-likelihood as a function of the full parameter vector
+# par = (beta, gamma, log theta), for the numerical Hessian.
+#' @noRd
+zinb_loglik_par <- function(par, X, Z, y, offset) {
+  p <- ncol(X)
+  q <- ncol(Z)
+  beta <- par[seq_len(p)]
+  gamma <- par[p + seq_len(q)]
+  theta <- exp(par[p + q + 1L])
+  mu <- exp(drop(X %*% beta) + offset)
+  zinb_loglik(y, mu, theta, drop(Z %*% gamma))
+}
+
+# Standard errors for ZINB (Section 3.2). EM gives no standard errors, so we
+# compute the observed information of the observed-data log-likelihood at the
+# MLE with respect to (beta, gamma, log theta):
+#   I_hat = -d^2 l / d par d par'   (numerical Hessian, numDeriv::hessian;
+#                                    this is differentiation, not optimization)
+#   Var(par_hat) = I_hat^{-1}
+# Returns the full covariance matrix, with names count_*, zero_*, and
+# "Log(theta)" (the same labels pscl::zeroinfl uses).
+#' @noRd
+zinb_vcov <- function(beta, gamma, theta, X, Z, y, offset) {
+  par <- c(beta, gamma, log(theta))
+  H <- numDeriv::hessian(zinb_loglik_par, par, X = X, Z = Z, y = y,
+                         offset = offset)
+  V <- solve(-H)
+  nm <- c(paste0("count_", colnames(X)), paste0("zero_", colnames(Z)),
+          "Log(theta)")
+  dimnames(V) <- list(nm, nm)
+  V
+}
