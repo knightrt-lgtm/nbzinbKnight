@@ -34,4 +34,8 @@ if (file.exists(search)) {
   jsonlite::write_json(s[keep], search, auto_unbox = TRUE)
 }
 
-message("Site built in docs/ (CLAUDE.md page removed).")
+# GitHub Pages: serve docs/ as-is (no Jekyll), so the .md copies pkgdown
+# writes next to each page are not converted over the real HTML pages
+file.create(file.path("docs", ".nojekyll"))
+
+message("Site built in docs/ (CLAUDE.md page removed, .nojekyll added).")
