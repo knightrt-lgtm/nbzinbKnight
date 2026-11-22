@@ -1,0 +1,33 @@
+url: https://knightrt-lgtm.github.io/nbzinbKnight/
+template:
+  bootstrap: 5
+
+destination: docs
+
+navbar:
+  structure:
+    left: [intro, reference, articles]
+    right: [search, github]
+
+reference:
+  - title: Negative binomial regression
+    desc: NB2 regression fitted by IRLS for beta and Newton-Raphson for log(theta).
+    contents:
+      - nbreg
+      - nbreg_control
+      - nbreg-methods
+  - title: Zero-inflated negative binomial regression
+    desc: ZINB regression fitted by an EM algorithm with IRLS M-steps.
+    contents:
+      - zinbreg
+      - zinbreg_control
+      - zinbreg-methods
+  - title: Package
+    contents:
+      - nbzinbKnight-package
+
+articles:
+  - title: Report
+    navbar: Report
+    contents:
+      - articles/report

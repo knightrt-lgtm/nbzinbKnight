@@ -18,6 +18,10 @@ the estimation from scratch rather than with a general-purpose optimizer:
 Both functions reproduce the reference implementations on the `bioChemists`
 and `NMES1988` data (see the comparison tests in `tests/testthat/`). This package was written for the STA 651 final project.
 
+**Website:** <https://knightrt-lgtm.github.io/nbzinbKnight/>, with the
+function reference and the
+[project report](https://knightrt-lgtm.github.io/nbzinbKnight/articles/report.html).
+
 ## Installation
 
 ```r

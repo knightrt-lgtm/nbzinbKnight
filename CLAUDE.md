@@ -37,5 +37,8 @@
 - Run tests: Rscript -e 'devtools::test()'
 - Full check (must be 0 errors, 0 warnings): Rscript -e 'devtools::check()'
 - Report PDF: quarto render vignettes/articles/report.qmd --to pdf
-- Website: Rscript -e 'pkgdown::build_site()'
+- Website: Rscript pkgdown/build-site.R  (wraps pkgdown::build_site() and
+  removes CLAUDE.md from the site; on this machine set RSTUDIO_PANDOC to
+  "C:/Program Files/RStudio/resources/app/bin/quarto/bin/tools" first).
+  Commit docs/ afterwards; GitHub Pages serves main /docs.
 - Close RStudio before updating installed packages (it locks package DLLs).

@@ -5,3 +5,8 @@
 ^CLAUDE\.md$
 ^\.github$
 ^vignettes/articles$
+^_pkgdown\.yml$
+^docs$
+^pkgdown$
+^vignettes/\.quarto$
+^vignettes/\.gitignore$

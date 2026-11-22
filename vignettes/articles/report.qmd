@@ -3,17 +3,17 @@ title: "Negative Binomial and Zero-Inflated Negative Binomial Regression by IRLS
 subtitle: "STA 651 Final Project: the nbzinbKnight R package"
 author: "Robert Knight"
 date: today
+# Only html is listed as a format so that pkgdown (which renders every listed
+# format) builds just the website article. The PDF is made with
+#   quarto render vignettes/articles/report.qmd --to pdf
+# and uses the document-level options below (html ignores geometry/fig-pos).
 format:
   html:
     toc: true
-  pdf:
-    toc: false
-    number-sections: true
-    geometry: margin=1in
-    fig-pos: "H"
-    echo: false
+number-sections: true
+geometry: margin=1in
+fig-pos: "H"
 execute:
-  echo: true
   warning: false
   message: false
 ---
@@ -25,7 +25,10 @@ library(nbzinbKnight)
 library(MASS)   # reference function glm.nb (comparison only)
 library(pscl)   # reference function zeroinfl (comparison only)
 data("NMES1988", package = "AER")
-knitr::opts_chunk$set(fig.align = "center", out.width = "80%")
+# Show code on the website but hide it in the PDF (chunks that set
+# echo: true themselves, e.g. the usage example, still show their code)
+knitr::opts_chunk$set(fig.align = "center", out.width = "80%",
+                      echo = !knitr::is_latex_output())
 ```
 
 # Introduction
