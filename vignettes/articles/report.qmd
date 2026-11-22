@@ -104,10 +104,10 @@ Iteration stops when no coefficient changes by more than $10^{-10}$.
 derivative in $\theta$ are
 $$
 \begin{aligned}
-U(\theta) &= \sum_i a_i\Bigl[\psi(y_i+\theta) - \psi(\theta) + \log\theta + 1 \\
-&\qquad\quad - \log(\theta+\mu_i) - \frac{y_i+\theta}{\theta+\mu_i}\Bigr], \\
-H(\theta) &= \sum_i a_i\Bigl[\psi'(y_i+\theta) - \psi'(\theta) + \frac{1}{\theta} \\
-&\qquad\quad - \frac{2}{\theta+\mu_i} + \frac{y_i+\theta}{(\theta+\mu_i)^2}\Bigr],
+U(\theta) &= \sum_i a_i\bigl[\psi(y_i+\theta) - \psi(\theta) + \log\theta + 1 \\
+&\qquad\quad - \log(\theta+\mu_i) - \frac{y_i+\theta}{\theta+\mu_i}\bigr], \\
+H(\theta) &= \sum_i a_i\bigl[\psi'(y_i+\theta) - \psi'(\theta) + \frac{1}{\theta} \\
+&\qquad\quad - \frac{2}{\theta+\mu_i} + \frac{y_i+\theta}{(\theta+\mu_i)^2}\bigr],
 \end{aligned}
 $$
 with $\psi$ and $\psi'$ the digamma and trigamma functions. To keep
