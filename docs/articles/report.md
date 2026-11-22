@@ -49,8 +49,10 @@ model. With prior weights $`a_i`$ (all 1 for an ordinary fit) the
 log-likelihood is
 ``` math
 
-\ell(\beta, \theta) = \sum_i a_i \bigl[\log\Gamma(y_i + \theta) - \log\Gamma(\theta)
-- \log y_i! + \theta\log\theta + y_i \log\mu_i - (\theta + y_i)\log(\theta + \mu_i)\bigr].
+\begin{aligned}
+\ell(\beta, \theta) = \sum_i a_i \bigl[ &\log\Gamma(y_i + \theta) - \log\Gamma(\theta) - \log y_i! \\
+&+ \theta\log\theta + y_i \log\mu_i - (\theta + y_i)\log(\theta + \mu_i)\bigr].
+\end{aligned}
 ```
 
 **IRLS for $`\beta`$ ($`\theta`$ fixed).** For fixed $`\theta`$ the
@@ -71,15 +73,16 @@ $`X^\top W X`$. Iteration stops when no coefficient changes by more than
 $`10^{-10}`$.
 
 **Newton–Raphson for $`\theta`$ ($`\beta`$ fixed).** The score and
-second derivative in $`\theta`$ are \$\$ U(\theta) = \sum_i
-a_i\Bigl\[\psi(y_i+\theta) - \psi(\theta) + \log\theta + 1 -
-\log(\theta+\mu_i) - \frac{y_i+\theta}{\theta+\mu_i}\Bigr\], \$\$ \$\$
-H(\theta) = \sum_i a_i\Bigl\[\psi'(y_i+\theta) - \psi'(\theta) +
-\frac{1}{\theta} - \frac{2}{\theta+\mu_i} +
-\frac{y_i+\theta}{(\theta+\mu_i)^2}\Bigr\], \$\$ with $`\psi`$ and
-$`\psi'`$ the digamma and trigamma functions. To keep $`\theta > 0`$ the
-update is made on $`\phi = \log\theta`$, using $`U_\phi = \theta U`$ and
-$`H_\phi = \theta^2 H + \theta U`$:
+second derivative in $`\theta`$ are \$\$ \begin{aligned} U(\theta) &=
+\sum_i a_i\Bigl\[\psi(y_i+\theta) - \psi(\theta) + \log\theta + 1 \\
+&\qquad\quad - \log(\theta+\mu_i) -
+\frac{y_i+\theta}{\theta+\mu_i}\Bigr\], \\ H(\theta) &= \sum_i
+a_i\Bigl\[\psi'(y_i+\theta) - \psi'(\theta) + \frac{1}{\theta} \\
+&\qquad\quad - \frac{2}{\theta+\mu_i} +
+\frac{y_i+\theta}{(\theta+\mu_i)^2}\Bigr\], \end{aligned} \$\$ with
+$`\psi`$ and $`\psi'`$ the digamma and trigamma functions. To keep
+$`\theta > 0`$ the update is made on $`\phi = \log\theta`$, using
+$`U_\phi = \theta U`$ and $`H_\phi = \theta^2 H + \theta U`$:
 $`\phi \leftarrow \phi - U_\phi / H_\phi`$. As safeguards, a step that
 would lower the log-likelihood is halved until it does not, and if
 $`H_\phi \ge 0`$ (the log-likelihood is not concave at that point) a

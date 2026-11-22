@@ -7,6 +7,16 @@ binomial regression by an EM algorithm whose M-steps are IRLS fits.
 Results are checked against MASS::glm.nb() and pscl::zeroinfl().
 Developed as the STA 651 final project.
 
+## See also
+
+Useful links:
+
+- <https://knightrt-lgtm.github.io/nbzinbKnight/>
+
+- <https://github.com/knightrt-lgtm/nbzinbKnight>
+
+- Report bugs at <https://github.com/knightrt-lgtm/nbzinbKnight/issues>
+
 ## Author
 
 **Maintainer**: Robert Knight <knightrt@miamioh.edu>
