@@ -7,10 +7,11 @@ format:
   html:
     toc: true
   pdf:
-    toc: true
+    toc: false
     number-sections: true
     geometry: margin=1in
     fig-pos: "H"
+    echo: false
 execute:
   echo: true
   warning: false
@@ -29,28 +30,334 @@ knitr::opts_chunk$set(fig.align = "center", out.width = "80%")
 
 # Introduction
 
-<!-- TO WRITE (you): count data, overdispersion, and excess zeros; goals of
-the package. Roughly half a page. -->
+<!-- DRAFT (Claude): reword anything that does not sound like you. -->
+
+Many responses in applied work are counts: the number of doctor visits, of
+articles published, of insurance claims. The Poisson regression model is the
+natural starting point, but it forces the variance to equal the mean. Real
+count data are usually *overdispersed*, with a variance well above the mean,
+and they often contain *more zeros* than a Poisson model with the same mean
+can produce. Ignoring overdispersion gives standard errors that are too small
+and tests that reject too often; ignoring excess zeros gives a poor fit to
+the most common outcome.
+
+Two standard extensions address these problems. Negative binomial (NB)
+regression adds a dispersion parameter $\theta$ so that the variance can
+exceed the mean. Zero-inflated negative binomial (ZINB) regression goes
+further and treats the data as a mixture of two groups: structural zeros,
+who always report zero, and an NB group, who may or may not.
+
+This project builds the R package **nbzinbKnight**, which fits both models
+without any general-purpose optimizer. NB regression is fitted by
+iteratively reweighted least squares (IRLS) for the coefficients, alternated
+with Newton–Raphson for $\theta$; ZINB regression is fitted by an EM
+algorithm whose M-steps are themselves IRLS fits. The goals are to implement
+these algorithms correctly, to show that they reproduce the established
+functions `MASS::glm.nb()` and `pscl::zeroinfl()`, to check by simulation
+that the ZINB estimates and standard errors behave as they should, and to
+use the package to analyse physician visits in the `NMES1988` data.
 
 # Methods
 
-<!-- Next step: NB2 and ZINB models, IRLS, Newton-Raphson, and EM with
-equations; standard errors; convergence criteria. -->
+<!-- DRAFT (Claude): check every equation against the code and the project
+description, Sections 2-3. -->
+
+## Negative binomial regression
+
+For a count $Y_i$ with covariate vector $x_i$, the NB2 model has
+$$
+P(Y_i = y) = \frac{\Gamma(y + \theta)}{\Gamma(\theta)\, y!}
+\left(\frac{\theta}{\theta + \mu_i}\right)^{\theta}
+\left(\frac{\mu_i}{\theta + \mu_i}\right)^{y},
+\qquad \log \mu_i = \eta_i = x_i^\top \beta + o_i ,
+$$
+where $o_i$ is an optional offset. Then $E(Y_i) = \mu_i$ and
+$\mathrm{Var}(Y_i) = \mu_i + \mu_i^2/\theta$, so smaller $\theta$ means more
+overdispersion and $\theta \to \infty$ gives the Poisson model. With prior
+weights $a_i$ (all 1 for an ordinary fit) the log-likelihood is
+$$
+\ell(\beta, \theta) = \sum_i a_i \bigl[\log\Gamma(y_i + \theta) - \log\Gamma(\theta)
+- \log y_i! + \theta\log\theta + y_i \log\mu_i - (\theta + y_i)\log(\theta + \mu_i)\bigr].
+$$
+
+**IRLS for $\beta$ ($\theta$ fixed).** For fixed $\theta$ the model is a GLM
+with log link and variance function $V(\mu) = \mu + \mu^2/\theta$, so Fisher
+scoring is repeated weighted least squares with working weights and working
+response
+$$
+w_i = a_i \frac{(\partial\mu_i/\partial\eta_i)^2}{V(\mu_i)} = a_i\frac{\theta\mu_i}{\theta + \mu_i},
+\qquad
+z_i = (\eta_i - o_i) + \frac{y_i - \mu_i}{\mu_i},
+\qquad
+\beta^{(t+1)} = (X^\top W X)^{-1} X^\top W z .
+$$
+The package solves the least-squares step by a QR decomposition of
+$W^{1/2}X$, which gives the same $\beta$ without forming $X^\top W X$.
+Iteration stops when no coefficient changes by more than $10^{-10}$.
+
+**Newton–Raphson for $\theta$ ($\beta$ fixed).** The score and second
+derivative in $\theta$ are
+$$
+U(\theta) = \sum_i a_i\Bigl[\psi(y_i+\theta) - \psi(\theta) + \log\theta + 1
+- \log(\theta+\mu_i) - \frac{y_i+\theta}{\theta+\mu_i}\Bigr],
+$$
+$$
+H(\theta) = \sum_i a_i\Bigl[\psi'(y_i+\theta) - \psi'(\theta) + \frac{1}{\theta}
+- \frac{2}{\theta+\mu_i} + \frac{y_i+\theta}{(\theta+\mu_i)^2}\Bigr],
+$$
+with $\psi$ and $\psi'$ the digamma and trigamma functions. To keep
+$\theta > 0$ the update is made on $\phi = \log\theta$, using
+$U_\phi = \theta U$ and $H_\phi = \theta^2 H + \theta U$:
+$\phi \leftarrow \phi - U_\phi / H_\phi$. As safeguards, a step that would
+lower the log-likelihood is halved until it does not, and if $H_\phi \ge 0$
+(the log-likelihood is not concave at that point) a unit step uphill is taken
+instead.
+
+**Outer loop.** The fit starts from a Poisson IRLS fit (the $\theta\to\infty$
+limit of the weights, $w_i = a_i\mu_i$) and the moment estimate
+$\theta_0 = \sum_i a_i\mu_i^2 / \sum_i a_i[(y_i-\mu_i)^2 - \mu_i]$. It then
+alternates the two updates until the log-likelihood changes by less than
+$10^{-8}$.
+
+**Standard errors.** Following `glm.nb()`, $\widehat{\mathrm{Var}}(\hat\beta)
+= (X^\top \hat W X)^{-1}$, treating $\theta$ as known, and
+$\mathrm{SE}(\hat\theta) = \{-H(\hat\theta)\}^{-1/2}$.
+
+## Zero-inflated negative binomial regression
+
+In the ZINB model, observation $i$ is a structural zero with probability
+$\pi_i$ and otherwise comes from $\mathrm{NB}(\mu_i, \theta)$:
+$$
+P(Y_i = 0) = \pi_i + (1-\pi_i) f_{\mathrm{NB}}(0;\mu_i,\theta), \qquad
+P(Y_i = y) = (1-\pi_i) f_{\mathrm{NB}}(y;\mu_i,\theta),\ y \ge 1,
+$$
+with $f_{\mathrm{NB}}(0;\mu,\theta) = \{\theta/(\theta+\mu)\}^\theta$,
+$\log\mu_i = x_i^\top\beta + o_i$, and $\mathrm{logit}\,\pi_i = z_i^\top\gamma$,
+where the zero-model covariates $z_i$ may differ from $x_i$. The marginal
+mean is $(1-\pi_i)\mu_i$. Because each zero contributes
+$\log[\pi_i + (1-\pi_i)f_{\mathrm{NB}}(0)]$, the log of a sum, the
+log-likelihood is not that of an exponential-family GLM and cannot be
+maximized by IRLS directly.
+
+**EM algorithm.** Let $D_i = 1$ if observation $i$ is a structural zero. If
+the $D_i$ were known, the complete-data log-likelihood would split into a
+logistic regression for $\gamma$ and an NB regression for $(\beta,\theta)$
+on the non-structural observations, each of which IRLS can fit. EM replaces
+the unknown $D_i$ by their conditional expectations:
+
+- *E-step:* $\tau_i = P(D_i = 1 \mid y_i) = \pi_i / [\pi_i + (1-\pi_i)f_{\mathrm{NB}}(0;\mu_i,\theta)]$
+  if $y_i = 0$, and $\tau_i = 0$ if $y_i > 0$.
+- *M-step, zero part:* maximize $\sum_i[\tau_i\log\pi_i + (1-\tau_i)\log(1-\pi_i)]$,
+  a logistic regression with fractional response $\tau_i$, by IRLS with
+  $w_i = \pi_i(1-\pi_i)$ and $z_i = z_i^\top\gamma + (\tau_i - \pi_i)/\{\pi_i(1-\pi_i)\}$.
+- *M-step, count part:* maximize $\sum_i (1-\tau_i)\log f_{\mathrm{NB}}(y_i;\mu_i,\theta)$,
+  which is exactly the NB fit above with prior weights $a_i = 1-\tau_i$.
+
+EM starts from the NB fit for $(\beta,\theta)$ and from an IRLS logistic
+regression of $I(y_i = 0)$ on $z_i$ for $\gamma$, warm-starts each M-step
+from the previous iterate, and stops when the observed-data log-likelihood
+changes by less than $10^{-8}$. EM can never decrease the log-likelihood;
+the package records it at every iteration and warns if it ever falls. All
+probabilities are computed on the log scale (`plogis(..., log.p = TRUE)`
+and a log-sum-exp for the zero term) to avoid underflow when $\pi_i$ is near
+0 or 1.
+
+**Standard errors.** EM does not produce an information matrix. After
+convergence the package computes the Hessian of its own observed-data
+log-likelihood with respect to $(\beta, \gamma, \log\theta)$ numerically with
+`numDeriv::hessian()` (differentiation, not optimization), and inverts its
+negative. As in `zeroinfl()`, $\log\theta$ is reported with its standard
+error; $\mathrm{SE}(\hat\theta) = \hat\theta\,\mathrm{SE}(\log\hat\theta)$
+by the delta method.
 
 # The R package
 
-<!-- Next step: design, main functions, S3 methods, usage example,
-installation. -->
+<!-- DRAFT (Claude): check against the code. -->
+
+The package is on GitHub and installs with
+
+```{r}
+#| eval: false
+#| echo: true
+# install.packages("devtools")
+devtools::install_github("knightrt-lgtm/nbzinbKnight")
+```
+
+**Design.** The estimation code is split into small internal building
+blocks, each implementing one equation of the Methods section, and two
+user-facing fitting functions built from them:
+
+| File | Contents |
+|:-----|:---------|
+| `R/nb_internal.R` | NB log-likelihood; IRLS update for $\beta$; score and second derivative in $\theta$; Newton–Raphson for $\log\theta$ |
+| `R/nbreg.R` | `nbreg()`, `nbreg_control()`, and the outer loop with standard errors |
+| `R/zinb_internal.R` | ZINB log-likelihood; E-step; fractional logistic IRLS; numerical-Hessian covariance |
+| `R/zinbreg.R` | `zinbreg()`, `zinbreg_control()`, and the EM loop |
+| `R/methods-*.R` | S3 methods for both classes |
+
+The count-part M-step of `zinbreg()` calls the same function that
+`nbreg()` uses, with prior weights $1 - \tau_i$, so the NB code is written
+and tested once. `zinbreg()` reads two-part formulas `y ~ x1 + x2 | z1 + z2`
+with the **Formula** package; without `|`, both parts use the same
+covariates, as in `zeroinfl()`. Both functions accept an offset for the count
+model, as an argument or as `offset()` in the formula, and give informative
+errors for invalid responses. They warn if the algorithm reaches its
+iteration limit without converging or if $\hat\theta$ becomes very large
+(the Poisson limit). No function in `R/` calls `optim()`, `glm()`, or any
+other optimizer or fitting function.
+
+**Objects and methods.** `nbreg()` and `zinbreg()` return S3 objects of class
+`"nbreg"` and `"zinbreg"`, containing the coefficients, covariance matrix,
+$\hat\theta$ and its standard error, the log-likelihood, the number of
+iterations, a convergence flag, fitted values, and the call. Both classes
+have `print`, `summary` (Wald tables), `coef`, `vcov`, `logLik` (with a `df`
+attribute, so `AIC()` and `BIC()` work), `fitted`, `residuals` (Pearson and
+response), `nobs`, and `predict` methods. For ZINB fits, `predict()`
+returns the mean $(1-\pi)\mu$, the count mean $\mu$, or the zero
+probability $\pi$ (`type = "response"`, `"count"`, `"zero"`).
+
+**Usage.**
+
+```{r}
+#| label: usage
+#| echo: true
+data("bioChemists", package = "pscl")
+fit <- zinbreg(art ~ fem + mar + kid5 + phd + ment | ment, data = bioChemists)
+coef(fit, model = "zero")
+AIC(fit)
+predict(fit, newdata = bioChemists[1:3, ], type = "zero")
+```
+
+**Testing.** The package has testthat tests that compare both functions
+with `glm.nb()` and `zeroinfl()` on both data sets within the project's required
+tolerances, plus tests of offsets, single-covariate and two-part formulas,
+every S3 method, the monotone EM log-likelihood, and input errors.
+`devtools::check()` reports 0 errors, 0 warnings, and 0 notes, and the same
+check runs on GitHub Actions for macOS, Windows, and Linux.
 
 # Benchmarking
 
-<!-- Next step: agreement tables and timing for both data sets, from
-inst/benchmark/benchmark_results.rds. -->
+<!-- DRAFT (Claude): check the wording against the tables. -->
+
+```{r}
+#| label: bench-load
+#| include: false
+bench <- readRDS(system.file("benchmark", "benchmark_results.rds",
+                             package = "nbzinbKnight"))
+```
+
+The script `inst/benchmark/benchmark.R` fits both models on `bioChemists`
+(n = `r bench$bioChemists$n`) and `NMES1988` (n = `r bench$NMES1988$n`) with
+this package and with the reference functions, run with tight tolerances
+(`glm.control(epsilon = 1e-10)` and `zeroinfl.control(reltol = 1e-12)`). The
+ZINB model uses all five `bioChemists` covariates in both parts, and the
+`NMES1988` zero model uses `hospital`, `chronic`, `gender`, `school`, and
+`insurance`. @tbl-bench-agree gives the largest absolute difference for each
+quantity against the tolerance required by the project; the full
+side-by-side estimates are in the Appendix.
+
+```{r}
+#| label: tbl-bench-agree
+#| tbl-cap: "Maximum absolute difference between this package and the reference functions, with the required tolerance."
+agree <- do.call(rbind, lapply(c("bioChemists", "NMES1988"), function(ds) {
+  do.call(rbind, lapply(c(nb = "NB", zinb = "ZINB"), function(mod) {
+    md <- bench[[ds]][[tolower(mod)]]$max_diff
+    data.frame(`Data set` = ds, Model = mod, Quantity = md$quantity,
+               `Max abs. difference` = formatC(md$max_abs_diff, format = "e",
+                                               digits = 1),
+               Tolerance = formatC(md$tolerance, format = "e", digits = 0),
+               Pass = ifelse(md$pass, "yes", "NO"), check.names = FALSE)
+  }))
+}))
+knitr::kable(agree, row.names = FALSE, booktabs = TRUE)
+```
+
+Every quantity is within its tolerance. The NB fits agree with `glm.nb()`
+to about $10^{-10}$, essentially to rounding error, because both programs
+solve the same score equations by the same algorithm. The ZINB fits agree
+with `zeroinfl()` to about $10^{-4}$ in the coefficients and to better than
+$10^{-7}$ in the log-likelihood. The remaining gap in the coefficients comes
+from EM's slow final convergence: once an iteration improves the
+log-likelihood by less than $10^{-8}$ the algorithm stops, but the
+likelihood is very flat near its maximum, so the coefficients can still be
+about $10^{-4}$ from the optimum. The standard errors differ by a similar
+amount, partly for the same reason and partly because both packages
+compute the ZINB Hessian numerically, by different methods.
+
+```{r}
+#| label: tbl-bench-time
+#| tbl-cap: "Median computation time in seconds (10 runs for NB, 3 for ZINB), and the number of outer (NB) or EM (ZINB) iterations."
+timing <- do.call(rbind, lapply(c("bioChemists", "NMES1988"), function(ds) {
+  do.call(rbind, lapply(c(nb = "NB", zinb = "ZINB"), function(mod) {
+    r <- bench[[ds]][[tolower(mod)]]
+    data.frame(`Data set` = ds, Model = mod,
+               nbzinbKnight = r$time[["nbzinbKnight"]],
+               Reference = r$time[["reference"]], Iterations = r$iter,
+               check.names = FALSE)
+  }))
+}))
+knitr::kable(timing, digits = 2, row.names = FALSE, booktabs = TRUE)
+```
+
+For NB regression this package is faster than `glm.nb()`, which goes
+through the more general `glm()` machinery. For ZINB it is several times
+slower than `zeroinfl()`: EM converges linearly and needs tens to about a
+hundred iterations, each containing a full weighted NB fit, whereas
+`zeroinfl()` updates all parameters at once with a quasi-Newton optimizer.
+The numerical Hessian for the standard errors adds further time. All fits
+still take only a few seconds.
 
 # Simulation study
 
-<!-- Next step: results table from inst/benchmark/simulation_results.rds and
-a brief discussion. -->
+<!-- DRAFT (Claude): check the wording against the table. -->
+
+```{r}
+#| label: sim-load
+#| include: false
+sim <- readRDS(system.file("benchmark", "simulation_results.rds",
+                           package = "nbzinbKnight"))
+tr <- sim$design$truth
+```
+
+To check that `zinbreg()` recovers known parameters and that its standard
+errors are correct, the script `inst/benchmark/simulation.R` generates
+$R = `r sim$design$R`$ data sets of size $n = `r sim$design$n`$ from a ZINB
+model with one covariate in each part,
+$$
+\log\mu_i = `r tr[["count_(Intercept)"]]` + `r tr[["count_x"]]`\,x_i, \qquad
+\mathrm{logit}\,\pi_i = `r tr[["zero_(Intercept)"]]` + `r tr[["zero_z"]]`\,z_i, \qquad
+\theta = `r round(exp(tr[["Log(theta)"]]), 2)`,
+$$
+with $x_i$ and $z_i$ independent standard normal (seed
+`r sim$design$seed`). About `r round(100 * sim$mean_zero_share)`% of the
+simulated responses are zero. All `r sim$n_converged` fits converged, with
+a median of `r as.integer(sim$iterations[["Median"]])` EM iterations.
+
+```{r}
+#| label: tbl-sim
+#| tbl-cap: "Simulation results (R = 200, n = 500): bias, Monte Carlo SD of the estimates, mean estimated SE, and coverage of 95% Wald intervals."
+st <- sim$summary
+st$parameter <- c("Count: intercept", "Count: x", "Zero: intercept",
+                  "Zero: z", "log(theta)")
+names(st) <- c("Parameter", "True", "Mean estimate", "Bias", "MC SD",
+               "Mean SE", "Coverage")
+knitr::kable(st, digits = 3, row.names = FALSE, booktabs = TRUE)
+```
+
+The estimates are centred on the true values: every bias is small compared
+with the Monte Carlo SD. The mean estimated standard errors are close to the
+Monte Carlo SDs, so the numerical-Hessian standard errors describe the real
+sampling variability well. Coverage is between
+`r round(min(st$Coverage), 3)` and `r round(max(st$Coverage), 3)`; with
+`r sim$n_used` replications, a coverage estimate has a Monte Carlo standard
+error of about `r round(sqrt(0.95 * 0.05 / sim$n_used), 3)`, so all values are
+consistent with the nominal 95%. The parameter $\log\theta$ shows the
+largest bias (`r round(st$Bias[5], 3)`) and the lowest coverage. A positive
+bias in $\log\theta$ means $\theta$ is slightly overestimated on average, so
+the overdispersion is slightly understated. This is not surprising:
+$\theta$ is identified only through the extra spread of the non-structural
+counts, and maximum likelihood estimates of dispersion parameters are
+commonly biased in moderate samples.
 
 # Data analysis: NMES1988
 
@@ -91,8 +398,20 @@ legend("topright", c("Observed", "Poisson expected"), pch = c(22, 19),
        col = c("grey40", "firebrick"), bty = "n")
 ```
 
-<!-- TO WRITE (you): what the table and figure show about overdispersion
-and zeros. -->
+<!-- DRAFT (Claude): rewrite in your own words. -->
+
+The counts are strongly overdispersed: the sample variance is
+`r round(var(y), 1)`, about `r round(var(y) / mean(y), 1)` times the mean of
+`r round(mean(y), 2)`, whereas a Poisson distribution has variance equal to
+its mean. The zeros tell the same story more dramatically. A Poisson
+distribution with the observed mean would put only about
+`r round(length(y) * dpois(0, mean(y)))` people at zero visits, but
+`r sum(y == 0)` (`r round(100 * mean(y == 0), 1)`%) reported none.
+@fig-nmes-hist also shows the opposite failure in the right tail: the Poisson
+curve is concentrated between about 2 and 10 visits, while the data have
+many more people with very few visits and many more with very many. A model
+for these data needs extra variance, and possibly a separate process for
+the zeros.
 
 ## Model fitting
 
@@ -103,6 +422,7 @@ model uses `hospital`, `chronic`, `gender`, `school`, and `insurance`.
 
 ```{r}
 #| label: nmes-fit
+#| echo: true
 f_count <- visits ~ hospital + health + chronic + gender + school + insurance
 f_zinb <- visits ~ hospital + health + chronic + gender + school + insurance |
   hospital + chronic + gender + school + insurance
@@ -112,10 +432,12 @@ m_nb   <- nbreg(f_count, data = NMES1988)
 m_zinb <- zinbreg(f_zinb, data = NMES1988)
 ```
 
+::: {.content-visible when-format="html"}
 ```{r}
 #| label: nmes-zinb-summary
 summary(m_zinb)
 ```
+:::
 
 ## Model comparison
 
@@ -142,8 +464,39 @@ cmp <- data.frame(
 knitr::kable(cmp, digits = 1, row.names = FALSE, booktabs = TRUE)
 ```
 
-<!-- TO WRITE (you): what the comparison shows (log-likelihood, AIC, BIC,
-expected vs observed zeros for each model). -->
+```{r}
+#| label: compare-numbers
+#| include: false
+ll <- setNames(cmp$logLik, cmp$Model)
+aic <- setNames(cmp$AIC, cmp$Model)
+bic <- setNames(cmp$BIC, cmp$Model)
+ez <- round(exp_zero)
+n0 <- sum(y == 0)
+```
+
+<!-- DRAFT (Claude): rewrite in your own words. -->
+
+The Poisson model is far behind both alternatives. Its log-likelihood is
+`r round(ll[["NB"]] - ll[["Poisson"]])` lower than the NB model's, at the
+cost of a single extra parameter ($\theta$), and it predicts only `r ez[["Poisson"]]`
+zeros against `r n0` observed.
+
+Allowing overdispersion fixes most, but not all, of the problem. The NB
+model predicts `r ez[["NB"]]` zeros, still `r n0 - ez[["NB"]]` short of the
+observed count. Unlike in the `bioChemists` example, overdispersion alone
+does not account for the zeros here.
+
+The ZINB model predicts `r ez[["ZINB"]]` zeros, closer to the observed
+`r n0` (it slightly overshoots), and raises the log-likelihood by a further
+`r round(ll[["ZINB"]] - ll[["NB"]], 1)` with
+`r cmp$df[3] - cmp$df[2]` extra parameters. Both information criteria
+prefer it: AIC is `r round(aic[["NB"]] - aic[["ZINB"]], 1)` lower than for
+the NB model and BIC, which penalizes the extra parameters more heavily, is
+still `r round(bic[["NB"]] - bic[["ZINB"]], 1)` lower. We do not use a
+likelihood-ratio test of NB against ZINB: the NB model corresponds to
+$\pi = 0$, which lies on the boundary of the ZINB parameter space
+($\gamma \to -\infty$), so the usual $\chi^2$ reference distribution does
+not apply.
 
 ## Interpretation
 
@@ -160,12 +513,20 @@ s_nb <- summary(m_nb)$coefficients[-1, ]
 s_zc <- summary(m_zinb)$coefficients$count
 s_zc <- s_zc[!(rownames(s_zc) %in% c("(Intercept)", "Log(theta)")), ]
 s_zz <- summary(m_zinb)$coefficients$zero[-1, ]
+# Readable covariate labels for the tables
+nice <- function(x) {
+  lab <- c(hospital = "Hospital stays", healthpoor = "Health: poor (vs average)",
+           healthexcellent = "Health: excellent (vs average)",
+           chronic = "Chronic conditions", gendermale = "Male (vs female)",
+           school = "Years of education", insuranceyes = "Private insurance")
+  unname(ifelse(x %in% names(lab), lab[x], x))
+}
 ```
 
 ```{r}
 #| label: tbl-nmes-irr
 #| tbl-cap: "Count part: incidence rate ratios (IRR) with 95% Wald confidence intervals."
-knitr::kable(data.frame(Covariate = rownames(s_nb),
+knitr::kable(data.frame(Covariate = nice(rownames(s_nb)),
                         `NB IRR (95% CI)` = wald_ci(s_nb),
                         `ZINB count IRR (95% CI)` = wald_ci(s_zc),
                         check.names = FALSE),
@@ -175,28 +536,156 @@ knitr::kable(data.frame(Covariate = rownames(s_nb),
 ```{r}
 #| label: tbl-nmes-or
 #| tbl-cap: "ZINB zero part: odds ratios (OR) of being a structural zero, with 95% Wald confidence intervals."
-knitr::kable(data.frame(Covariate = rownames(s_zz),
+knitr::kable(data.frame(Covariate = nice(rownames(s_zz)),
                         `OR (95% CI)` = wald_ci(s_zz),
                         `p-value` = format.pval(s_zz[, "Pr(>|z|)"], digits = 2),
                         check.names = FALSE),
              row.names = FALSE, booktabs = TRUE, align = "lcc")
 ```
 
-<!-- TO WRITE (you): plain-language interpretation of the dispersion
-parameter, the IRRs (count part), and the ORs (zero part). -->
+```{r}
+#| label: interp-numbers
+#| include: false
+irr <- function(tab, term) exp(tab[term, "Estimate"])
+pct <- function(r) round(100 * abs(r - 1))
+mu_bar <- mean(fitted(m_nb))
+```
+
+<!-- DRAFT (Claude): rewrite in your own words. -->
+
+**Dispersion.** The NB model estimates $\hat\theta$ =
+`r round(m_nb$theta, 2)` (SE `r round(m_nb$se_theta, 3)`). At the average
+fitted mean of `r round(mu_bar, 1)` visits, the NB variance
+$\mu + \mu^2/\theta$ is about `r round(mu_bar + mu_bar^2 / m_nb$theta, 1)`,
+compared with `r round(mu_bar, 1)` under a Poisson model. In the ZINB
+model, $\hat\theta$ = `r round(m_zinb$theta, 2)`
+(SE `r round(m_zinb$se_theta, 3)`) is larger, meaning less overdispersion
+among the people who do see a physician: some of the extra variation the NB
+model attributes to $\theta$ is explained by the separate group of
+structural zeros.
+
+**Count part (@tbl-nmes-irr).** The ZINB count part describes how many visits a
+person makes, among people who are "at risk" of visiting a physician. Holding
+the other covariates fixed:
+
+- Each additional hospital stay multiplies the expected number of visits by
+  `r round(irr(s_zc, "hospital"), 2)` (about `r pct(irr(s_zc, "hospital"))`%
+  more), and each additional chronic condition by
+  `r round(irr(s_zc, "chronic"), 2)` (`r pct(irr(s_zc, "chronic"))`% more).
+- Compared with people who rate their health as average, those in poor
+  health make about `r pct(irr(s_zc, "healthpoor"))`% more visits and those
+  in excellent health about `r pct(irr(s_zc, "healthexcellent"))`% fewer.
+- Men make about `r pct(irr(s_zc, "gendermale"))`% fewer visits than women,
+  each extra year of education adds about `r pct(irr(s_zc, "school"))`%, and
+  private insurance adds about `r pct(irr(s_zc, "insuranceyes"))`%.
+
+All of these intervals exclude 1, and the NB model gives the same
+directions with similar sizes. The clearest difference is insurance: the NB
+IRR (`r round(irr(s_nb, "insuranceyes"), 2)`) is noticeably larger than the
+ZINB count IRR (`r round(irr(s_zc, "insuranceyes"), 2)`). The ZINB model
+suggests that much of the insurance effect works through *whether* a person
+sees a physician at all, not through how often.
+
+**Zero part (@tbl-nmes-or).** The zero part models the odds of being a
+structural zero: a non-user of physician care in this period, as opposed to
+a user who happened to make no visits (an NB zero). Holding the other
+covariates fixed:
+
+- Each chronic condition multiplies these odds by
+  `r round(irr(s_zz, "chronic"), 2)`, a `r pct(irr(s_zz, "chronic"))`%
+  reduction: people with chronic illness are much less likely to be
+  non-users.
+- Private insurance multiplies the odds by
+  `r round(irr(s_zz, "insuranceyes"), 2)`
+  (`r pct(irr(s_zz, "insuranceyes"))`% lower), consistent with cost being a
+  barrier to any use of care.
+- Men have `r round(irr(s_zz, "gendermale"), 2)` times the odds of women of
+  being a non-user, and each extra year of education lowers the odds by about
+  `r pct(irr(s_zz, "school"))`%.
+- The hospital-stay effect points the same way (OR
+  `r round(irr(s_zz, "hospital"), 2)`) but is not significant at the 5% level
+  (p = `r round(s_zz["hospital", "Pr(>|z|)"], 3)`), and its interval is wide.
+
+Chronic conditions and insurance therefore act on both parts of the model:
+they make a person more likely to use care at all and, among users, to use
+more of it.
 
 ## Which model?
 
-<!-- TO WRITE (you): which model you prefer and why. -->
+<!-- DRAFT (Claude): rewrite in your own words. -->
+
+We prefer the ZINB model for NMES1988. Unlike the `bioChemists` example, the
+NB model clearly under-predicts the zeros here, both AIC and BIC favour ZINB
+by a wide margin, and the zero part has several precisely estimated effects
+with a sensible interpretation: illness and insurance separate people who
+use physician care from those who do not. The NB model remains a reasonable
+simpler summary of the count effects, whose directions it reproduces, but it
+blends the decision to see a physician with the frequency of visits, which
+the insurance coefficient shows can be misleading.
 
 # Discussion
 
-<!-- TO WRITE (you): limitations and possible extensions. -->
+<!-- DRAFT (Claude): reword anything that does not sound like you. -->
+
+The package meets its main goal: IRLS with Newton–Raphson reproduces
+`glm.nb()` essentially exactly, EM with IRLS M-steps reproduces
+`zeroinfl()` within the required tolerance, and the simulation shows that
+the ZINB estimates and standard errors behave as large-sample theory
+predicts. Building the ZINB fit from the NB code also made the structure of
+the model clear: each EM iteration is just a logistic regression and a
+weighted NB regression.
+
+The approach has limitations. EM converges linearly, so ZINB fits are
+slower than `zeroinfl()` and stop slightly short of the exact maximum: the
+coefficients agree to about $10^{-4}$ rather than to rounding error. The
+ZINB standard errors depend on a numerical Hessian, and the NB standard
+errors for $\beta$ treat $\theta$ as known, which ignores its estimation
+uncertainty (as `glm.nb()` also does). The package supports only the log
+link for the count part and the logit link for the zero part, an offset
+only in the count part, and no user-supplied observation weights. Finally,
+because the NB model sits on the boundary of the ZINB parameter space, the
+comparison between them relies on information criteria rather than a
+standard likelihood-ratio test.
+
+Several extensions would be natural. An analytic Hessian of the ZINB
+log-likelihood would give exact standard errors and remove the dependence
+on `numDeriv`. EM could be accelerated (for example with SQUAREM), or
+followed by a few Newton steps on the full parameter vector once it is
+close to the maximum. The same EM structure would also fit zero-inflated
+Poisson models and, with small changes, hurdle models, in which zeros and
+positive counts come from separate processes.
 
 # AI-use statement
 
-<!-- TO WRITE (you): how you used Claude Code, what you verified yourself,
-and one example where you corrected or rejected its output. -->
+<!-- TO WRITE (you): this must be your own account. Section 6.1(8) asks for
+(1) what you asked Claude Code to do, (2) what you verified yourself, and
+(3) one example where you had to correct or reject its output.
+
+Facts you can draw on (check each against your own memory and the git log):
+- Workflow: you set the rules (CLAUDE.md with the banned functions, small
+  steps by the Section 11 checkpoints, a check-in after each step, re-reading
+  CLAUDE.md before each step, the bonus deferred until the base project was
+  done) and approved each step before it was committed.
+- Claude wrote the code, tests, benchmark and simulation scripts, and drafts
+  of the report prose; you rewrote the NMES1988 interpretation yourself.
+- Checks made at each step: comparisons with glm.nb / zeroinfl /
+  theta.ml / glm(quasibinomial), numerical derivatives of U and H, a search
+  of R/ for banned functions before every commit, devtools::check(), and
+  CI on GitHub Actions.
+- Corrections during the project (pick one you were involved in):
+  * Claude said you needed to install Rtools; you questioned it and it was
+    already installed (likewise Quarto, bundled with RStudio).
+  * The first draft defined a structural zero as a person who would not
+    visit "regardless of their health", which contradicts the zero model
+    containing chronic conditions; it was corrected.
+  * Unicode Greek letters in the draft did not render in the PDF.
+  * The summary table's Log(theta) row lost its name; the comparison with
+    zeroinfl caught it.
+  * Several first-run test failures were bugs in the test code, not the
+    package (parsing trace output, passing offset through ... to zeroinfl,
+    names on predict output).
+- What you verified yourself: fill in (e.g. re-running the comparisons,
+  reading the IRLS weights and E-step against Section 3, checking R/). -->
 
 # References
 
@@ -216,3 +705,28 @@ and one example where you corrected or rejected its output. -->
 - Wickham, H. and Bryan, J. (2023). *R Packages* (2nd ed.). O'Reilly.
 - Zeileis, A., Kleiber, C. and Jackman, S. (2008). Regression models for
   count data in R. *Journal of Statistical Software*, 27(8), 1–25.
+
+# Appendix: side-by-side benchmark estimates {.unnumbered}
+
+```{r}
+#| label: appendix-bench
+#| echo: false
+#| results: asis
+for (ds in c("bioChemists", "NMES1988")) {
+  for (mod in c("nb", "zinb")) {
+    tab <- bench[[ds]][[mod]]$table
+    ref <- if (mod == "nb") "glm.nb" else "zeroinfl"
+    tab <- data.frame(Quantity = tab$quantity, Term = tab$term,
+                      nbzinbKnight = formatC(tab$ours, format = "f", digits = 6),
+                      Reference = formatC(tab$reference, format = "f", digits = 6),
+                      `Abs. difference` = formatC(tab$abs_diff, format = "e",
+                                                  digits = 1),
+                      check.names = FALSE)
+    print(knitr::kable(tab, row.names = FALSE, booktabs = TRUE,
+                       caption = sprintf("%s, %s: this package vs %s().", ds,
+                                         toupper(mod), ref)))
+    cat("\n\n")
+  }
+}
+```
+
