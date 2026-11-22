@@ -1,0 +1,218 @@
+---
+title: "Negative Binomial and Zero-Inflated Negative Binomial Regression by IRLS and EM"
+subtitle: "STA 651 Final Project: the nbzinbKnight R package"
+author: "Robert Knight"
+date: today
+format:
+  html:
+    toc: true
+  pdf:
+    toc: true
+    number-sections: true
+    geometry: margin=1in
+    fig-pos: "H"
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: setup
+#| include: false
+library(nbzinbKnight)
+library(MASS)   # reference function glm.nb (comparison only)
+library(pscl)   # reference function zeroinfl (comparison only)
+data("NMES1988", package = "AER")
+knitr::opts_chunk$set(fig.align = "center", out.width = "80%")
+```
+
+# Introduction
+
+<!-- TO WRITE (you): count data, overdispersion, and excess zeros; goals of
+the package. Roughly half a page. -->
+
+# Methods
+
+<!-- Next step: NB2 and ZINB models, IRLS, Newton-Raphson, and EM with
+equations; standard errors; convergence criteria. -->
+
+# The R package
+
+<!-- Next step: design, main functions, S3 methods, usage example,
+installation. -->
+
+# Benchmarking
+
+<!-- Next step: agreement tables and timing for both data sets, from
+inst/benchmark/benchmark_results.rds. -->
+
+# Simulation study
+
+<!-- Next step: results table from inst/benchmark/simulation_results.rds and
+a brief discussion. -->
+
+# Data analysis: NMES1988
+
+The `NMES1988` data (Deb and Trivedi, 1997; Zeileis, Kleiber, and Jackman,
+2008), in the **AER** package, record the number of physician office visits
+(`visits`) in 1987–88 for 4,406 people aged 66 and over in the US National
+Medical Expenditure Survey. The covariates are the number of hospital stays
+(`hospital`), self-perceived health (`health`: poor, average, excellent),
+the number of chronic conditions (`chronic`), `gender`, years of education
+(`school`), and whether the person has private insurance (`insurance`).
+
+## Descriptive summary
+
+```{r}
+#| label: tbl-nmes-describe
+#| tbl-cap: "Summary of the number of physician office visits."
+y <- NMES1988$visits
+desc <- c(n = length(y), mean = mean(y), variance = var(y),
+          `variance / mean` = var(y) / mean(y),
+          `observed zeros` = sum(y == 0),
+          `Poisson expected zeros` = length(y) * dpois(0, mean(y)))
+knitr::kable(t(desc), digits = 2, booktabs = TRUE)
+```
+
+```{r}
+#| label: fig-nmes-hist
+#| fig-cap: "Observed frequencies of physician office visits (bars; 30 = 30 or more) and frequencies expected under a Poisson distribution with the same mean (points)."
+#| fig-width: 7
+#| fig-height: 4
+tab <- table(factor(pmin(y, 30), levels = 0:30))
+bp <- barplot(tab, col = "grey80", border = "grey40",
+              ylim = c(0, max(tab) * 1.1),
+              xlab = "Physician office visits (30 = 30 or more)",
+              ylab = "Frequency")
+points(bp, length(y) * dpois(0:30, mean(y)), pch = 19, col = "firebrick")
+legend("topright", c("Observed", "Poisson expected"), pch = c(22, 19),
+       pt.bg = c("grey80", NA), pt.cex = c(2, 1),
+       col = c("grey40", "firebrick"), bty = "n")
+```
+
+<!-- TO WRITE (you): what the table and figure show about overdispersion
+and zeros. -->
+
+## Model fitting
+
+The Poisson model is fitted with `glm()` for reference; the NB and ZINB
+models are fitted with this package. The count model uses `hospital`,
+`health`, `chronic`, `gender`, `school`, and `insurance`; the zero-inflation
+model uses `hospital`, `chronic`, `gender`, `school`, and `insurance`.
+
+```{r}
+#| label: nmes-fit
+f_count <- visits ~ hospital + health + chronic + gender + school + insurance
+f_zinb <- visits ~ hospital + health + chronic + gender + school + insurance |
+  hospital + chronic + gender + school + insurance
+
+m_pois <- glm(f_count, family = poisson, data = NMES1988)
+m_nb   <- nbreg(f_count, data = NMES1988)
+m_zinb <- zinbreg(f_zinb, data = NMES1988)
+```
+
+```{r}
+#| label: nmes-zinb-summary
+summary(m_zinb)
+```
+
+## Model comparison
+
+```{r}
+#| label: tbl-nmes-compare
+#| tbl-cap: "Model comparison for NMES1988 (observed zeros = 683)."
+pi_hat <- predict(m_zinb, type = "zero")
+mu_hat <- predict(m_zinb, type = "count")
+exp_zero <- c(
+  Poisson = sum(dpois(0, fitted(m_pois))),
+  NB      = sum(dnbinom(0, size = m_nb$theta, mu = fitted(m_nb))),
+  # ZINB: P(Y = 0) = pi + (1 - pi) f_NB(0; mu, theta)
+  ZINB    = sum(pi_hat + (1 - pi_hat) *
+                  dnbinom(0, size = m_zinb$theta, mu = mu_hat)))
+fits <- list(Poisson = m_pois, NB = m_nb, ZINB = m_zinb)
+cmp <- data.frame(
+  Model = names(fits),
+  df = sapply(fits, function(m) attr(logLik(m), "df")),
+  logLik = sapply(fits, function(m) as.numeric(logLik(m))),
+  AIC = sapply(fits, AIC),
+  BIC = sapply(fits, BIC),
+  `Expected zeros` = exp_zero,
+  check.names = FALSE)
+knitr::kable(cmp, digits = 1, row.names = FALSE, booktabs = TRUE)
+```
+
+<!-- TO WRITE (you): what the comparison shows (log-likelihood, AIC, BIC,
+expected vs observed zeros for each model). -->
+
+## Interpretation
+
+```{r}
+#| label: interp-helpers
+# Exponentiated estimate with 95% Wald interval: exp(est +/- 1.96 SE)
+wald_ci <- function(tab) {
+  est <- tab[, "Estimate"]
+  se <- tab[, "Std. Error"]
+  sprintf("%.2f (%.2f, %.2f)", exp(est), exp(est - 1.96 * se),
+          exp(est + 1.96 * se))
+}
+s_nb <- summary(m_nb)$coefficients[-1, ]
+s_zc <- summary(m_zinb)$coefficients$count
+s_zc <- s_zc[!(rownames(s_zc) %in% c("(Intercept)", "Log(theta)")), ]
+s_zz <- summary(m_zinb)$coefficients$zero[-1, ]
+```
+
+```{r}
+#| label: tbl-nmes-irr
+#| tbl-cap: "Count part: incidence rate ratios (IRR) with 95% Wald confidence intervals."
+knitr::kable(data.frame(Covariate = rownames(s_nb),
+                        `NB IRR (95% CI)` = wald_ci(s_nb),
+                        `ZINB count IRR (95% CI)` = wald_ci(s_zc),
+                        check.names = FALSE),
+             row.names = FALSE, booktabs = TRUE, align = "lcc")
+```
+
+```{r}
+#| label: tbl-nmes-or
+#| tbl-cap: "ZINB zero part: odds ratios (OR) of being a structural zero, with 95% Wald confidence intervals."
+knitr::kable(data.frame(Covariate = rownames(s_zz),
+                        `OR (95% CI)` = wald_ci(s_zz),
+                        `p-value` = format.pval(s_zz[, "Pr(>|z|)"], digits = 2),
+                        check.names = FALSE),
+             row.names = FALSE, booktabs = TRUE, align = "lcc")
+```
+
+<!-- TO WRITE (you): plain-language interpretation of the dispersion
+parameter, the IRRs (count part), and the ORs (zero part). -->
+
+## Which model?
+
+<!-- TO WRITE (you): which model you prefer and why. -->
+
+# Discussion
+
+<!-- TO WRITE (you): limitations and possible extensions. -->
+
+# AI-use statement
+
+<!-- TO WRITE (you): how you used Claude Code, what you verified yourself,
+and one example where you corrected or rejected its output. -->
+
+# References
+
+- Cameron, A. C. and Trivedi, P. K. (2013). *Regression Analysis of Count
+  Data* (2nd ed.). Cambridge University Press.
+- Deb, P. and Trivedi, P. K. (1997). Demand for medical care by the elderly:
+  A finite mixture approach. *Journal of Applied Econometrics*, 12(3),
+  313–336.
+- Dempster, A. P., Laird, N. M. and Rubin, D. B. (1977). Maximum likelihood
+  from incomplete data via the EM algorithm. *JRSS-B*, 39(1), 1–38.
+- Lambert, D. (1992). Zero-inflated Poisson regression, with an application
+  to defects in manufacturing. *Technometrics*, 34(1), 1–14.
+- McCullagh, P. and Nelder, J. A. (1989). *Generalized Linear Models* (2nd
+  ed.). Chapman & Hall.
+- Venables, W. N. and Ripley, B. D. (2002). *Modern Applied Statistics with
+  S* (4th ed.). Springer.
+- Wickham, H. and Bryan, J. (2023). *R Packages* (2nd ed.). O'Reilly.
+- Zeileis, A., Kleiber, C. and Jackman, S. (2008). Regression models for
+  count data in R. *Journal of Statistical Software*, 27(8), 1–25.

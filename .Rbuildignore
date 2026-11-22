@@ -4,3 +4,4 @@
 ^project-docs$
 ^CLAUDE\.md$
 ^\.github$
+^vignettes/articles$
