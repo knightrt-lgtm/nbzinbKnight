@@ -1,7 +1,7 @@
 ---
 title: "Negative Binomial and Zero-Inflated Negative Binomial Regression by IRLS and EM"
-subtitle: "STA 651 Final Project: the nbzinbKnight R package"
-author: "Robert Knight"
+subtitle: "STA 651 Module 2 Project: nbzinbKnight R package"
+author: "Robbie Knight"
 date: today
 # Only html is listed as a format so that pkgdown (which renders every listed
 # format) builds just the website article. The PDF is made with
@@ -33,8 +33,6 @@ knitr::opts_chunk$set(fig.align = "center", out.width = "80%",
 
 # Introduction
 
-<!-- DRAFT (Claude): reword anything that does not sound like you. -->
-
 Many responses in applied work are counts: the number of doctor visits, of
 articles published, of insurance claims. The Poisson regression model is the
 natural starting point, but it forces the variance to equal the mean. Real
@@ -61,9 +59,6 @@ that the ZINB estimates and standard errors behave as they should, and to
 use the package to analyse physician visits in the `NMES1988` data.
 
 # Methods
-
-<!-- DRAFT (Claude): check every equation against the code and the project
-description, Sections 2-3. -->
 
 ## Negative binomial regression
 
@@ -177,8 +172,6 @@ by the delta method.
 
 # The R package
 
-<!-- DRAFT (Claude): check against the code. -->
-
 The package is on GitHub and installs with
 
 ```{r}
@@ -241,8 +234,6 @@ every S3 method, the monotone EM log-likelihood, and input errors.
 check runs on GitHub Actions for macOS, Windows, and Linux.
 
 # Benchmarking
-
-<!-- DRAFT (Claude): check the wording against the tables. -->
 
 ```{r}
 #| label: bench-load
@@ -313,8 +304,6 @@ The numerical Hessian for the standard errors adds further time. All fits
 still take only a few seconds.
 
 # Simulation study
-
-<!-- DRAFT (Claude): check the wording against the table. -->
 
 ```{r}
 #| label: sim-load
@@ -391,7 +380,7 @@ knitr::kable(t(desc), digits = 2, booktabs = TRUE)
 #| label: fig-nmes-hist
 #| fig-cap: "Observed frequencies of physician office visits (bars; 30 = 30 or more) and frequencies expected under a Poisson distribution with the same mean (points)."
 #| fig-width: 7
-#| fig-height: 4
+#| fig-height: !expr if (knitr::is_latex_output()) 2.8 else 4
 tab <- table(factor(pmin(y, 30), levels = 0:30))
 bp <- barplot(tab, col = "grey80", border = "grey40",
               ylim = c(0, max(tab) * 1.1),
@@ -402,8 +391,6 @@ legend("topright", c("Observed", "Poisson expected"), pch = c(22, 19),
        pt.bg = c("grey80", NA), pt.cex = c(2, 1),
        col = c("grey40", "firebrick"), bty = "n")
 ```
-
-<!-- DRAFT (Claude): rewrite in your own words. -->
 
 The counts are strongly overdispersed: the sample variance is
 `r round(var(y), 1)`, about `r round(var(y) / mean(y), 1)` times the mean of
@@ -479,14 +466,12 @@ ez <- round(exp_zero)
 n0 <- sum(y == 0)
 ```
 
-<!-- DRAFT (Claude): rewrite in your own words. -->
-
 The Poisson model is far behind both alternatives. Its log-likelihood is
 `r round(ll[["NB"]] - ll[["Poisson"]])` lower than the NB model's, at the
 cost of a single extra parameter ($\theta$), and it predicts only `r ez[["Poisson"]]`
 zeros against `r n0` observed.
 
-Allowing overdispersion fixes most, but not all, of the problem. The NB
+Allowing overdispersion doesn't completely fix the problem. The NB
 model predicts `r ez[["NB"]]` zeros, still `r n0 - ez[["NB"]]` short of the
 observed count. Unlike in the `bioChemists` example, overdispersion alone
 does not account for the zeros here.
@@ -556,8 +541,6 @@ pct <- function(r) round(100 * abs(r - 1))
 mu_bar <- mean(fitted(m_nb))
 ```
 
-<!-- DRAFT (Claude): rewrite in your own words. -->
-
 **Dispersion.** The NB model estimates $\hat\theta$ =
 `r round(m_nb$theta, 2)` (SE `r round(m_nb$se_theta, 3)`). At the average
 fitted mean of `r round(mu_bar, 1)` visits, the NB variance
@@ -585,7 +568,7 @@ the other covariates fixed:
   private insurance adds about `r pct(irr(s_zc, "insuranceyes"))`%.
 
 All of these intervals exclude 1, and the NB model gives the same
-directions with similar sizes. The clearest difference is insurance: the NB
+directions with similar sizes. The most apparent difference is insurance: the NB
 IRR (`r round(irr(s_nb, "insuranceyes"), 2)`) is noticeably larger than the
 ZINB count IRR (`r round(irr(s_zc, "insuranceyes"), 2)`). The ZINB model
 suggests that much of the insurance effect works through *whether* a person
@@ -617,10 +600,8 @@ more of it.
 
 ## Which model?
 
-<!-- DRAFT (Claude): rewrite in your own words. -->
-
 We prefer the ZINB model for NMES1988. Unlike the `bioChemists` example, the
-NB model clearly under-predicts the zeros here, both AIC and BIC favour ZINB
+NB model under-predicts the zeros here, both AIC and BIC favor ZINB
 by a wide margin, and the zero part has several precisely estimated effects
 with a sensible interpretation: illness and insurance separate people who
 use physician care from those who do not. The NB model remains a reasonable
@@ -630,17 +611,15 @@ the insurance coefficient shows can be misleading.
 
 # Discussion
 
-<!-- DRAFT (Claude): reword anything that does not sound like you. -->
-
-The package meets its main goal: IRLS with Newton–Raphson reproduces
-`glm.nb()` essentially exactly, EM with IRLS M-steps reproduces
+The package does what it was intended to do: IRLS with Newton–Raphson essentially reproduces
+`glm.nb()`, EM with IRLS M-steps reproduces
 `zeroinfl()` within the required tolerance, and the simulation shows that
-the ZINB estimates and standard errors behave as large-sample theory
+the ZINB estimates and standard errors act as large-sample theory
 predicts. Building the ZINB fit from the NB code also made the structure of
 the model clear: each EM iteration is just a logistic regression and a
 weighted NB regression.
 
-The approach has limitations. EM converges linearly, so ZINB fits are
+Still, there are limitations to be acknowledged. EM converges linearly, so ZINB fits are
 slower than `zeroinfl()` and stop slightly short of the exact maximum: the
 coefficients agree to about $10^{-4}$ rather than to rounding error. The
 ZINB standard errors depend on a numerical Hessian, and the NB standard
@@ -662,35 +641,29 @@ positive counts come from separate processes.
 
 # AI-use statement
 
-<!-- TO WRITE (you): this must be your own account. Section 6.1(8) asks for
-(1) what you asked Claude Code to do, (2) what you verified yourself, and
-(3) one example where you had to correct or reject its output.
+Claude Code was used throughout the creation and implementation of this R 
+package as a coding assistant. From the start, it was laid out to Claude what 
+functions it could and could not use. A document titled CLAUDE.md which can be 
+found in the GitHub repository outlines what Claude was and was not permitted to 
+use throughout the coding process. Claude was instructed to read this document 
+before carrying out any coding process so it was clear at each step what was 
+allowed. Before making any commits, Claude was asked to stop and check in for
+approval before publishing anything. Claude wrote the R code, tests, benchmark 
+and simulation scripts, the GitHub Actions and pkgdown setup, and drafts of the 
+report prose.
 
-Facts you can draw on (check each against your own memory and the git log):
-- Workflow: you set the rules (CLAUDE.md with the banned functions, small
-  steps by the Section 11 checkpoints, a check-in after each step, re-reading
-  CLAUDE.md before each step, the bonus deferred until the base project was
-  done) and approved each step before it was committed.
-- Claude wrote the code, tests, benchmark and simulation scripts, and drafts
-  of the report prose; you rewrote the NMES1988 interpretation yourself.
-- Checks made at each step: comparisons with glm.nb / zeroinfl /
-  theta.ml / glm(quasibinomial), numerical derivatives of U and H, a search
-  of R/ for banned functions before every commit, devtools::check(), and
-  CI on GitHub Actions.
-- Corrections during the project (pick one you were involved in):
-  * Claude said you needed to install Rtools; you questioned it and it was
-    already installed (likewise Quarto, bundled with RStudio).
-  * The first draft defined a structural zero as a person who would not
-    visit "regardless of their health", which contradicts the zero model
-    containing chronic conditions; it was corrected.
-  * Unicode Greek letters in the draft did not render in the PDF.
-  * The summary table's Log(theta) row lost its name; the comparison with
-    zeroinfl caught it.
-  * Several first-run test failures were bugs in the test code, not the
-    package (parsing trace output, passing offset through ... to zeroinfl,
-    names on predict output).
-- What you verified yourself: fill in (e.g. re-running the comparisons,
-  reading the IRLS weights and E-step against Section 3, checking R/). -->
+After Claude drafted the sections of the report, I verified what was written 
+myself and then edited. Before commits were made, I verified a few things 
+myself such as reviewing Claude's comparisons with the glm.nb function, zeroinfl,
+theta.ml, and glm(quasibinomial). One error was caught here by Claude the first time rerunning. When comparing with
+zeroinfl, the summary table's Log(theta) row didn't have a name. This 
+error was then corrected.
+
+Early on in the project, Claude also thought I did not yet have Rtools or 
+Quarto installed, but I had these already on my device, so I rejected Claude's
+request to install these features. Following this, I checked the setup
+requirements myself and made sure I had everything I needed and wasn't
+installing anything unnecessary.
 
 # References
 

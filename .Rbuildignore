@@ -10,3 +10,4 @@
 ^pkgdown$
 ^vignettes/\.quarto$
 ^vignettes/\.gitignore$
+^report$
