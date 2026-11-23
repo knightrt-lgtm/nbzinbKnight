@@ -543,10 +543,10 @@ The Poisson model is far behind both alternatives. Its log-likelihood is
 5801 lower than the NB model’s, at the cost of a single extra parameter
 ($`\theta`$), and it predicts only 47 zeros against 683 observed.
 
-Allowing overdispersion fixes most, but not all, of the problem. The NB
-model predicts 608 zeros, still 75 short of the observed count. Unlike
-in the `bioChemists` example, overdispersion alone does not account for
-the zeros here.
+Allowing overdispersion doesn’t completely fix the problem. The NB model
+predicts 608 zeros, still 75 short of the observed count. Unlike in the
+`bioChemists` example, overdispersion alone does not account for the
+zeros here.
 
 The ZINB model predicts 709 zeros, closer to the observed 683 (it
 slightly overshoots), and raises the log-likelihood by a further 79.8
@@ -644,10 +644,11 @@ visiting a physician. Holding the other covariates fixed:
   education adds about 2%, and private insurance adds about 13%.
 
 All of these intervals exclude 1, and the NB model gives the same
-directions with similar sizes. The clearest difference is insurance: the
-NB IRR (1.25) is noticeably larger than the ZINB count IRR (1.13). The
-ZINB model suggests that much of the insurance effect works through
-*whether* a person sees a physician at all, not through how often.
+directions with similar sizes. The most apparent difference is
+insurance: the NB IRR (1.25) is noticeably larger than the ZINB count
+IRR (1.13). The ZINB model suggests that much of the insurance effect
+works through *whether* a person sees a physician at all, not through
+how often.
 
 **Zero part ([Table 7](#tbl-nmes-or)).** The zero part models the odds
 of being a structural zero: a non-user of physician care in this period,
@@ -670,33 +671,33 @@ users, to use more of it.
 ### 6.5 Which model?
 
 We prefer the ZINB model for NMES1988. Unlike the `bioChemists` example,
-the NB model clearly under-predicts the zeros here, both AIC and BIC
-favour ZINB by a wide margin, and the zero part has several precisely
-estimated effects with a sensible interpretation: illness and insurance
-separate people who use physician care from those who do not. The NB
-model remains a reasonable simpler summary of the count effects, whose
+the NB model under-predicts the zeros here, both AIC and BIC favor ZINB
+by a wide margin, and the zero part has several precisely estimated
+effects with a sensible interpretation: illness and insurance separate
+people who use physician care from those who do not. The NB model
+remains a reasonable simpler summary of the count effects, whose
 directions it reproduces, but it blends the decision to see a physician
 with the frequency of visits, which the insurance coefficient shows can
 be misleading.
 
 ## 7 Discussion
 
-The package meets its main goal: IRLS with Newton–Raphson reproduces
-`glm.nb()` essentially exactly, EM with IRLS M-steps reproduces
+The package does what it was intended to do: IRLS with Newton–Raphson
+essentially reproduces `glm.nb()`, EM with IRLS M-steps reproduces
 `zeroinfl()` within the required tolerance, and the simulation shows
-that the ZINB estimates and standard errors behave as large-sample
-theory predicts. Building the ZINB fit from the NB code also made the
-structure of the model clear: each EM iteration is just a logistic
-regression and a weighted NB regression.
+that the ZINB estimates and standard errors act as large-sample theory
+predicts. Building the ZINB fit from the NB code also made the structure
+of the model clear: each EM iteration is just a logistic regression and
+a weighted NB regression.
 
-The approach has limitations. EM converges linearly, so ZINB fits are
-slower than `zeroinfl()` and stop slightly short of the exact maximum:
-the coefficients agree to about $`10^{-4}`$ rather than to rounding
-error. The ZINB standard errors depend on a numerical Hessian, and the
-NB standard errors for $`\beta`$ treat $`\theta`$ as known, which
-ignores its estimation uncertainty (as `glm.nb()` also does). The
-package supports only the log link for the count part and the logit link
-for the zero part, an offset only in the count part, and no
+Still, there are limitations to be acknowledged. EM converges linearly,
+so ZINB fits are slower than `zeroinfl()` and stop slightly short of the
+exact maximum: the coefficients agree to about $`10^{-4}`$ rather than
+to rounding error. The ZINB standard errors depend on a numerical
+Hessian, and the NB standard errors for $`\beta`$ treat $`\theta`$ as
+known, which ignores its estimation uncertainty (as `glm.nb()` also
+does). The package supports only the log link for the count part and the
+logit link for the zero part, an offset only in the count part, and no
 user-supplied observation weights. Finally, because the NB model sits on
 the boundary of the ZINB parameter space, the comparison between them
 relies on information criteria rather than a standard likelihood-ratio
@@ -711,6 +712,32 @@ zero-inflated Poisson models and, with small changes, hurdle models, in
 which zeros and positive counts come from separate processes.
 
 ## 8 AI-use statement
+
+Claude Code was used throughout the creation and implementation of this
+R package as a coding assistant. From the start, it was laid out to
+Claude what functions it could and could not use. A document titled
+CLAUDE.md which can be found in the GitHub repository outlines what
+Claude was and was not permitted to use throughout the coding process.
+Claude was instructed to read this document before carrying out any
+coding process so it was clear at each step what was allowed. Before
+making any commits, Claude was asked to stop and check in for approval
+before publishing anything. Claude wrote the R code, tests, benchmark
+and simulation scripts, the GitHub Actions and pkgdown setup, and drafts
+of the report prose.
+
+After Claude drafted the sections of the report, I verified what was
+written myself and then edited. Before commits were made, I verified a
+few things myself such as reviewing Claude’s comparisons with the glm.nb
+function, zeroinfl, theta.ml, and glm(quasibinomial). One error was
+caught here by Claude the first time rerunning. When comparing with
+zeroinfl, the summary table’s Log(theta) row didn’t have a name. This
+error was then corrected.
+
+Early on in the project, Claude also thought I did not yet have Rtools
+or Quarto installed, but I had these already on my device, so I rejected
+Claude’s request to install these features. Following this, I checked
+the setup requirements myself and made sure I had everything I needed
+and wasn’t installing anything unnecessary.
 
 ## 9 References
 

@@ -56,8 +56,8 @@
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Negative Binomial and Zero-Inflated Negative Binomial Regression by IRLS and EM</h1>
-      <p class="subtitle">STA 651 Final Project: the nbzinbKnight R package</p>
-      <p class="author">Robert Knight</p>
+      <p class="subtitle">STA 651 Module 2 Project: nbzinbKnight R package</p>
+      <p class="author">Robbie Knight</p>
       <p class="date">2026-11-22</p>
 
       <small class="dont-index">Source: <a href="https://github.com/knightrt-lgtm/nbzinbKnight/blob/HEAD/vignettes/articles/report.qmd" class="external-link"><code>vignettes/articles/report.qmd</code></a></small>
@@ -72,15 +72,12 @@
     <section class="section level2" data-number="1"><h2 data-number="1" id="introduction">
 <span class="header-section-number">1</span> Introduction<a class="anchor" aria-label="anchor" href="#introduction"></a>
 </h2>
-<!-- DRAFT (Claude): reword anything that does not sound like you. -->
 <p>Many responses in applied work are counts: the number of doctor visits, of articles published, of insurance claims. The Poisson regression model is the natural starting point, but it forces the variance to equal the mean. Real count data are usually <em>overdispersed</em>, with a variance well above the mean, and they often contain <em>more zeros</em> than a Poisson model with the same mean can produce. Ignoring overdispersion gives standard errors that are too small and tests that reject too often; ignoring excess zeros gives a poor fit to the most common outcome.</p>
 <p>Two standard extensions address these problems. Negative binomial (NB) regression adds a dispersion parameter <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>θ</mi><annotation encoding="application/x-tex">\theta</annotation></semantics></math> so that the variance can exceed the mean. Zero-inflated negative binomial (ZINB) regression goes further and treats the data as a mixture of two groups: structural zeros, who always report zero, and an NB group, who may or may not.</p>
 <p>This project builds the R package <strong>nbzinbKnight</strong>, which fits both models without any general-purpose optimizer. NB regression is fitted by iteratively reweighted least squares (IRLS) for the coefficients, alternated with Newton–Raphson for <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>θ</mi><annotation encoding="application/x-tex">\theta</annotation></semantics></math>; ZINB regression is fitted by an EM algorithm whose M-steps are themselves IRLS fits. The goals are to implement these algorithms correctly, to show that they reproduce the established functions <code><a href="https://rdrr.io/pkg/MASS/man/glm.nb.html" class="external-link">MASS::glm.nb()</a></code> and <code><a href="https://rdrr.io/pkg/pscl/man/zeroinfl.html" class="external-link">pscl::zeroinfl()</a></code>, to check by simulation that the ZINB estimates and standard errors behave as they should, and to use the package to analyse physician visits in the <code>NMES1988</code> data.</p>
 </section><section class="section level2" data-number="2"><h2 data-number="2" id="methods">
 <span class="header-section-number">2</span> Methods<a class="anchor" aria-label="anchor" href="#methods"></a>
 </h2>
-<!-- DRAFT (Claude): check every equation against the code and the project
-description, Sections 2-3. -->
 <section class="level2" data-number="2.1"><h3 data-number="2.1" id="negative-binomial-regression">
 <span class="header-section-number">2.1</span> Negative binomial regression<a class="anchor" aria-label="anchor" href="#negative-binomial-regression"></a>
 </h3>
@@ -134,7 +131,6 @@ P(Y_i = y) = (1-\pi_i) f_{\mathrm{NB}}(y;\mu_i,\theta),\ y \ge 1,
 </section></section><section class="section level2" data-number="3"><h2 data-number="3" id="the-r-package">
 <span class="header-section-number">3</span> The R package<a class="anchor" aria-label="anchor" href="#the-r-package"></a>
 </h2>
-<!-- DRAFT (Claude): check against the code. -->
 <p>The package is on GitHub and installs with</p>
 <div class="cell" data-layout-align="center">
 <div class="sourceCode cell-code" id="cb1"><pre class="downlit sourceCode r">
@@ -205,7 +201,6 @@ P(Y_i = y) = (1-\pi_i) f_{\mathrm{NB}}(y;\mu_i,\theta),\ y \ge 1,
 </section><section class="section level2" data-number="4"><h2 data-number="4" id="benchmarking">
 <span class="header-section-number">4</span> Benchmarking<a class="anchor" aria-label="anchor" href="#benchmarking"></a>
 </h2>
-<!-- DRAFT (Claude): check the wording against the tables. -->
 <p>The script <code>inst/benchmark/benchmark.R</code> fits both models on <code>bioChemists</code> (n = 915) and <code>NMES1988</code> (n = 4406) with this package and with the reference functions, run with tight tolerances (<code>glm.control(epsilon = 1e-10)</code> and <code>zeroinfl.control(reltol = 1e-12)</code>). The ZINB model uses all five <code>bioChemists</code> covariates in both parts, and the <code>NMES1988</code> zero model uses <code>hospital</code>, <code>chronic</code>, <code>gender</code>, <code>school</code>, and <code>insurance</code>. <a href="#tbl-bench-agree" class="quarto-xref">Table 1</a> gives the largest absolute difference for each quantity against the tolerance required by the project; the full side-by-side estimates are in the Appendix.</p>
 <div class="cell" data-layout-align="center">
 <div class="sourceCode cell-code" id="cb8"><pre class="downlit sourceCode r">
@@ -444,7 +439,6 @@ Table 2: Median computation time in seconds (10 runs for NB, 3 for ZINB), and t
 </section><section class="section level2" data-number="5"><h2 data-number="5" id="simulation-study">
 <span class="header-section-number">5</span> Simulation study<a class="anchor" aria-label="anchor" href="#simulation-study"></a>
 </h2>
-<!-- DRAFT (Claude): check the wording against the table. -->
 <p>To check that <code><a href="../reference/zinbreg.html">zinbreg()</a></code> recovers known parameters and that its standard errors are correct, the script <code>inst/benchmark/simulation.R</code> generates <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>R</mi><mo>=</mo><mn>200</mn></mrow><annotation encoding="application/x-tex">R = 200</annotation></semantics></math> data sets of size <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>=</mo><mn>500</mn></mrow><annotation encoding="application/x-tex">n = 500</annotation></semantics></math> from a ZINB model with one covariate in each part, <math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>log</mo><msub><mi>μ</mi><mi>i</mi></msub><mo>=</mo><mn>1</mn><mo>+</mo><mn>0.5</mn><mspace width="0.167em"></mspace><msub><mi>x</mi><mi>i</mi></msub><mo>,</mo><mspace width="2.0em"></mspace><mrow><mi mathvariant="normal">l</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">g</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">t</mi></mrow><mspace width="0.167em"></mspace><msub><mi>π</mi><mi>i</mi></msub><mo>=</mo><mi>−</mi><mn>0.5</mn><mo>+</mo><mn>1</mn><mspace width="0.167em"></mspace><msub><mi>z</mi><mi>i</mi></msub><mo>,</mo><mspace width="2.0em"></mspace><mi>θ</mi><mo>=</mo><mn>2</mn><mo>,</mo></mrow><annotation encoding="application/x-tex">
 \log\mu_i = 1 + 0.5\,x_i, \qquad
 \mathrm{logit}\,\pi_i = -0.5 + 1\,z_i, \qquad
@@ -609,7 +603,6 @@ Figure 1: Observed frequencies of physician office visits (bars; 30 = 30 or mor
 </div>
 </div>
 </div>
-<!-- DRAFT (Claude): rewrite in your own words. -->
 <p>The counts are strongly overdispersed: the sample variance is 45.7, about 7.9 times the mean of 5.77, whereas a Poisson distribution has variance equal to its mean. The zeros tell the same story more dramatically. A Poisson distribution with the observed mean would put only about 14 people at zero visits, but 683 (15.5%) reported none. <a href="#fig-nmes-hist" class="quarto-xref">Figure 1</a> also shows the opposite failure in the right tail: the Poisson curve is concentrated between about 2 and 10 visits, while the data have many more people with very few visits and many more with very many. A model for these data needs extra variance, and possibly a separate process for the zeros.</p>
 </section><section class="level2" data-number="6.2"><h3 data-number="6.2" id="model-fitting">
 <span class="header-section-number">6.2</span> Model fitting<a class="anchor" aria-label="anchor" href="#model-fitting"></a>
@@ -736,9 +729,8 @@ Table 5: Model comparison for NMES1988 (observed zeros = 683).
 </figure>
 </div>
 </div>
-<!-- DRAFT (Claude): rewrite in your own words. -->
 <p>The Poisson model is far behind both alternatives. Its log-likelihood is 5801 lower than the NB model’s, at the cost of a single extra parameter (<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>θ</mi><annotation encoding="application/x-tex">\theta</annotation></semantics></math>), and it predicts only 47 zeros against 683 observed.</p>
-<p>Allowing overdispersion fixes most, but not all, of the problem. The NB model predicts 608 zeros, still 75 short of the observed count. Unlike in the <code>bioChemists</code> example, overdispersion alone does not account for the zeros here.</p>
+<p>Allowing overdispersion doesn’t completely fix the problem. The NB model predicts 608 zeros, still 75 short of the observed count. Unlike in the <code>bioChemists</code> example, overdispersion alone does not account for the zeros here.</p>
 <p>The ZINB model predicts 709 zeros, closer to the observed 683 (it slightly overshoots), and raises the log-likelihood by a further 79.8 with 6 extra parameters. Both information criteria prefer it: AIC is 147.7 lower than for the NB model and BIC, which penalizes the extra parameters more heavily, is still 109.3 lower. We do not use a likelihood-ratio test of NB against ZINB: the NB model corresponds to <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>π</mi><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">\pi = 0</annotation></semantics></math>, which lies on the boundary of the ZINB parameter space (<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>γ</mi><mo>→</mo><mi>−</mi><mi>∞</mi></mrow><annotation encoding="application/x-tex">\gamma \to -\infty</annotation></semantics></math>), so the usual <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>χ</mi><mn>2</mn></msup><annotation encoding="application/x-tex">\chi^2</annotation></semantics></math> reference distribution does not apply.</p>
 </section><section class="level2" data-number="6.4"><h3 data-number="6.4" id="interpretation">
 <span class="header-section-number">6.4</span> Interpretation<a class="anchor" aria-label="anchor" href="#interpretation"></a>
@@ -882,7 +874,6 @@ Table 7: ZINB zero part: odds ratios (OR) of being a structural zero, with 95% 
 </figure>
 </div>
 </div>
-<!-- DRAFT (Claude): rewrite in your own words. -->
 <p><strong>Dispersion.</strong> The NB model estimates <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mover><mi>θ</mi><mo accent="true">̂</mo></mover><annotation encoding="application/x-tex">\hat\theta</annotation></semantics></math> = 1.21 (SE 0.034). At the average fitted mean of 5.9 visits, the NB variance <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>μ</mi><mo>+</mo><msup><mi>μ</mi><mn>2</mn></msup><mi>/</mi><mi>θ</mi></mrow><annotation encoding="application/x-tex">\mu + \mu^2/\theta</annotation></semantics></math> is about 34.6, compared with 5.9 under a Poisson model. In the ZINB model, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mover><mi>θ</mi><mo accent="true">̂</mo></mover><annotation encoding="application/x-tex">\hat\theta</annotation></semantics></math> = 1.48 (SE 0.052) is larger, meaning less overdispersion among the people who do see a physician: some of the extra variation the NB model attributes to <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>θ</mi><annotation encoding="application/x-tex">\theta</annotation></semantics></math> is explained by the separate group of structural zeros.</p>
 <p><strong>Count part (<a href="#tbl-nmes-irr" class="quarto-xref">Table 6</a>).</strong> The ZINB count part describes how many visits a person makes, among people who are “at risk” of visiting a physician. Holding the other covariates fixed:</p>
 <ul>
@@ -890,7 +881,7 @@ Table 7: ZINB zero part: odds ratios (OR) of being a structural zero, with 95% 
 <li>Compared with people who rate their health as average, those in poor health make about 33% more visits and those in excellent health about 27% fewer.</li>
 <li>Men make about 8% fewer visits than women, each extra year of education adds about 2%, and private insurance adds about 13%.</li>
 </ul>
-<p>All of these intervals exclude 1, and the NB model gives the same directions with similar sizes. The clearest difference is insurance: the NB IRR (1.25) is noticeably larger than the ZINB count IRR (1.13). The ZINB model suggests that much of the insurance effect works through <em>whether</em> a person sees a physician at all, not through how often.</p>
+<p>All of these intervals exclude 1, and the NB model gives the same directions with similar sizes. The most apparent difference is insurance: the NB IRR (1.25) is noticeably larger than the ZINB count IRR (1.13). The ZINB model suggests that much of the insurance effect works through <em>whether</em> a person sees a physician at all, not through how often.</p>
 <p><strong>Zero part (<a href="#tbl-nmes-or" class="quarto-xref">Table 7</a>).</strong> The zero part models the odds of being a structural zero: a non-user of physician care in this period, as opposed to a user who happened to make no visits (an NB zero). Holding the other covariates fixed:</p>
 <ul>
 <li>Each chronic condition multiplies these odds by 0.29, a 71% reduction: people with chronic illness are much less likely to be non-users.</li>
@@ -902,47 +893,19 @@ Table 7: ZINB zero part: odds ratios (OR) of being a structural zero, with 95% 
 </section><section class="level2" data-number="6.5"><h3 data-number="6.5" id="which-model">
 <span class="header-section-number">6.5</span> Which model?<a class="anchor" aria-label="anchor" href="#which-model"></a>
 </h3>
-<!-- DRAFT (Claude): rewrite in your own words. -->
-<p>We prefer the ZINB model for NMES1988. Unlike the <code>bioChemists</code> example, the NB model clearly under-predicts the zeros here, both AIC and BIC favour ZINB by a wide margin, and the zero part has several precisely estimated effects with a sensible interpretation: illness and insurance separate people who use physician care from those who do not. The NB model remains a reasonable simpler summary of the count effects, whose directions it reproduces, but it blends the decision to see a physician with the frequency of visits, which the insurance coefficient shows can be misleading.</p>
+<p>We prefer the ZINB model for NMES1988. Unlike the <code>bioChemists</code> example, the NB model under-predicts the zeros here, both AIC and BIC favor ZINB by a wide margin, and the zero part has several precisely estimated effects with a sensible interpretation: illness and insurance separate people who use physician care from those who do not. The NB model remains a reasonable simpler summary of the count effects, whose directions it reproduces, but it blends the decision to see a physician with the frequency of visits, which the insurance coefficient shows can be misleading.</p>
 </section></section><section class="section level2" data-number="7"><h2 data-number="7" id="discussion">
 <span class="header-section-number">7</span> Discussion<a class="anchor" aria-label="anchor" href="#discussion"></a>
 </h2>
-<!-- DRAFT (Claude): reword anything that does not sound like you. -->
-<p>The package meets its main goal: IRLS with Newton–Raphson reproduces <code>glm.nb()</code> essentially exactly, EM with IRLS M-steps reproduces <code>zeroinfl()</code> within the required tolerance, and the simulation shows that the ZINB estimates and standard errors behave as large-sample theory predicts. Building the ZINB fit from the NB code also made the structure of the model clear: each EM iteration is just a logistic regression and a weighted NB regression.</p>
-<p>The approach has limitations. EM converges linearly, so ZINB fits are slower than <code>zeroinfl()</code> and stop slightly short of the exact maximum: the coefficients agree to about <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mn>10</mn><mrow><mi>−</mi><mn>4</mn></mrow></msup><annotation encoding="application/x-tex">10^{-4}</annotation></semantics></math> rather than to rounding error. The ZINB standard errors depend on a numerical Hessian, and the NB standard errors for <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>β</mi><annotation encoding="application/x-tex">\beta</annotation></semantics></math> treat <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>θ</mi><annotation encoding="application/x-tex">\theta</annotation></semantics></math> as known, which ignores its estimation uncertainty (as <code>glm.nb()</code> also does). The package supports only the log link for the count part and the logit link for the zero part, an offset only in the count part, and no user-supplied observation weights. Finally, because the NB model sits on the boundary of the ZINB parameter space, the comparison between them relies on information criteria rather than a standard likelihood-ratio test.</p>
+<p>The package does what it was intended to do: IRLS with Newton–Raphson essentially reproduces <code>glm.nb()</code>, EM with IRLS M-steps reproduces <code>zeroinfl()</code> within the required tolerance, and the simulation shows that the ZINB estimates and standard errors act as large-sample theory predicts. Building the ZINB fit from the NB code also made the structure of the model clear: each EM iteration is just a logistic regression and a weighted NB regression.</p>
+<p>Still, there are limitations to be acknowledged. EM converges linearly, so ZINB fits are slower than <code>zeroinfl()</code> and stop slightly short of the exact maximum: the coefficients agree to about <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mn>10</mn><mrow><mi>−</mi><mn>4</mn></mrow></msup><annotation encoding="application/x-tex">10^{-4}</annotation></semantics></math> rather than to rounding error. The ZINB standard errors depend on a numerical Hessian, and the NB standard errors for <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>β</mi><annotation encoding="application/x-tex">\beta</annotation></semantics></math> treat <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>θ</mi><annotation encoding="application/x-tex">\theta</annotation></semantics></math> as known, which ignores its estimation uncertainty (as <code>glm.nb()</code> also does). The package supports only the log link for the count part and the logit link for the zero part, an offset only in the count part, and no user-supplied observation weights. Finally, because the NB model sits on the boundary of the ZINB parameter space, the comparison between them relies on information criteria rather than a standard likelihood-ratio test.</p>
 <p>Several extensions would be natural. An analytic Hessian of the ZINB log-likelihood would give exact standard errors and remove the dependence on <code>numDeriv</code>. EM could be accelerated (for example with SQUAREM), or followed by a few Newton steps on the full parameter vector once it is close to the maximum. The same EM structure would also fit zero-inflated Poisson models and, with small changes, hurdle models, in which zeros and positive counts come from separate processes.</p>
 </section><section class="section level2" data-number="8"><h2 data-number="8" id="ai-use-statement">
 <span class="header-section-number">8</span> AI-use statement<a class="anchor" aria-label="anchor" href="#ai-use-statement"></a>
 </h2>
-<!-- TO WRITE (you): this must be your own account. Section 6.1(8) asks for
-(1) what you asked Claude Code to do, (2) what you verified yourself, and
-(3) one example where you had to correct or reject its output.
-
-Facts you can draw on (check each against your own memory and the git log):
-- Workflow: you set the rules (CLAUDE.md with the banned functions, small
-  steps by the Section 11 checkpoints, a check-in after each step, re-reading
-  CLAUDE.md before each step, the bonus deferred until the base project was
-  done) and approved each step before it was committed.
-- Claude wrote the code, tests, benchmark and simulation scripts, and drafts
-  of the report prose; you rewrote the NMES1988 interpretation yourself.
-- Checks made at each step: comparisons with glm.nb / zeroinfl /
-  theta.ml / glm(quasibinomial), numerical derivatives of U and H, a search
-  of R/ for banned functions before every commit, devtools::check(), and
-  CI on GitHub Actions.
-- Corrections during the project (pick one you were involved in):
-  * Claude said you needed to install Rtools; you questioned it and it was
-    already installed (likewise Quarto, bundled with RStudio).
-  * The first draft defined a structural zero as a person who would not
-    visit "regardless of their health", which contradicts the zero model
-    containing chronic conditions; it was corrected.
-  * Unicode Greek letters in the draft did not render in the PDF.
-  * The summary table's Log(theta) row lost its name; the comparison with
-    zeroinfl caught it.
-  * Several first-run test failures were bugs in the test code, not the
-    package (parsing trace output, passing offset through ... to zeroinfl,
-    names on predict output).
-- What you verified yourself: fill in (e.g. re-running the comparisons,
-  reading the IRLS weights and E-step against Section 3, checking R/). -->
+<p>Claude Code was used throughout the creation and implementation of this R package as a coding assistant. From the start, it was laid out to Claude what functions it could and could not use. A document titled CLAUDE.md which can be found in the GitHub repository outlines what Claude was and was not permitted to use throughout the coding process. Claude was instructed to read this document before carrying out any coding process so it was clear at each step what was allowed. Before making any commits, Claude was asked to stop and check in for approval before publishing anything. Claude wrote the R code, tests, benchmark and simulation scripts, the GitHub Actions and pkgdown setup, and drafts of the report prose.</p>
+<p>After Claude drafted the sections of the report, I verified what was written myself and then edited. Before commits were made, I verified a few things myself such as reviewing Claude’s comparisons with the glm.nb function, zeroinfl, theta.ml, and glm(quasibinomial). One error was caught here by Claude the first time rerunning. When comparing with zeroinfl, the summary table’s Log(theta) row didn’t have a name. This error was then corrected.</p>
+<p>Early on in the project, Claude also thought I did not yet have Rtools or Quarto installed, but I had these already on my device, so I rejected Claude’s request to install these features. Following this, I checked the setup requirements myself and made sure I had everything I needed and wasn’t installing anything unnecessary.</p>
 </section><section class="section level2" data-number="9"><h2 data-number="9" id="references">
 <span class="header-section-number">9</span> References<a class="anchor" aria-label="anchor" href="#references"></a>
 </h2>
